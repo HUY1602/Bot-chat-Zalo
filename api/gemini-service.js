@@ -3,10 +3,13 @@
  * Handles AI response generation using Google Gemini API
  */
 
-const { GoogleGenAI } = require('@google/genai');
+const dns = require('dns');
+if (typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first');
+}
 
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const FALLBACK_MODELS = ['gemini-1.5-flash', 'gemini-2.0-flash'];
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+const FALLBACK_MODELS = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'];
 
 const DEFAULT_SYSTEM_INSTRUCTION = `Bạn là trợ lý AI thông minh, thân thiện và hữu ích trên nền tảng Zalo.
 Nhiệm vụ chính của bạn là hỗ trợ trả lời các câu hỏi thắc mắc, tư vấn, giải đáp kiến thức của các thành viên trong nhóm chat Zalo hoặc tin nhắn riêng tư.
@@ -43,6 +46,50 @@ function formatForZalo(text) {
 }
 
 /**
+ * Call Gemini REST API directly for maximum speed and zero dependencies
+ */
+async function callGeminiRest(model, prompt, apiKey, systemInstruction) {
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  
+  const body = {
+    contents: [
+      {
+        parts: [{ text: prompt }]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 1500
+    }
+  };
+
+  if (systemInstruction) {
+    body.systemInstruction = {
+      parts: [{ text: systemInstruction }]
+    };
+  }
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  const data = await res.json();
+
+  if (data.error) {
+    throw new Error(`[Gemini ${data.error.code}]: ${data.error.message}`);
+  }
+
+  const answer = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!answer) {
+    throw new Error('Không nhận được nội dung từ Gemini');
+  }
+
+  return formatForZalo(answer);
+}
+
+/**
  * Generate answer from Gemini for a given prompt
  * @param {string} prompt - User question or query
  * @param {object} options - Optional parameters
@@ -57,41 +104,18 @@ async function generateAnswer(prompt, options = {}) {
   const modelName = options.model || DEFAULT_MODEL;
   const systemInstruction = options.systemInstruction || process.env.SYSTEM_INSTRUCTION || DEFAULT_SYSTEM_INSTRUCTION;
 
+  // Try configured model first
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: prompt,
-      config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.7,
-        maxOutputTokens: 1500
-      }
-    });
-
-    if (response && response.text) {
-      return formatForZalo(response.text);
-    }
-    throw new Error('Không nhận được nội dung phản hồi từ Gemini');
+    return await callGeminiRest(modelName, prompt, apiKey, systemInstruction);
   } catch (primaryErr) {
-    console.warn(`Thử model ${modelName} gặp lỗi: ${primaryErr.message}. Đang thử fallback...`);
+    console.warn(`Model ${modelName} gặp lỗi: ${primaryErr.message}. Đang thử fallback...`);
     
-    // Attempt fallback models
+    // Try fallback models
     for (const fallback of FALLBACK_MODELS) {
       if (fallback === modelName) continue;
       try {
-        const ai = new GoogleGenAI({ apiKey });
-        const res = await ai.models.generateContent({
-          model: fallback,
-          contents: prompt,
-          config: {
-            systemInstruction: systemInstruction,
-            temperature: 0.7
-          }
-        });
-        if (res && res.text) {
-          return formatForZalo(res.text);
-        }
+        console.log(`Đang thử fallback model ${fallback}...`);
+        return await callGeminiRest(fallback, prompt, apiKey, systemInstruction);
       } catch (fbErr) {
         console.warn(`Fallback ${fallback} thất bại: ${fbErr.message}`);
       }
