@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zalo Gemini Bot • Dashboard Quản Trị & Cấu Hình 24/7</title>
+  <meta name="description" content="Trung tâm điều khiển và cấu hình bot Zalo AI hỏi đáp nhóm thông minh tích hợp Google Gemini API chạy 24/7 trên Vercel.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="background-glow glow-1"></div>
+  <div class="background-glow glow-2"></div>
+  <div class="background-glow glow-3"></div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a8 8 0 0 0-8 8c0 3.1 1.8 5.8 4.4 7.1L8 21l4.2-1.8A7.95 7.95 0 0 0 16 20a8 8 0 0 0 8-8 8 8 0 0 0-8-8z" stroke="none" fill="url(#zaloGradient)"/>
+            <path d="M9 10h.01M15 10h.01M9.5 15a3.5 3.5 0 0 0 5 0" stroke="#fff" stroke-linecap="round"/>
+            <defs>
+              <linearGradient id="zaloGradient" x1="0" y1="0" x2="24" y2="24">
+                <stop offset="0%" stop-color="#0068FF"/>
+                <stop offset="100%" stop-color="#00D2FF"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">Zalo Gemini Bot</h1>
+          <p class="brand-subtitle">Trợ lý AI hỏi đáp nhóm 24/7 trên Vercel Serverless</p>
+        </div>
+      </div>
+
+      <div class="header-status">
+        <span class="status-badge" id="system-badge">
+          <span class="pulse-dot"></span>
+          <span id="system-status-text">Đang kết nối...</span>
+        </span>
+      </div>
+    </header>
+
+    <!-- Main Grid -->
+    <main class="dashboard-grid">
+      <!-- Left Column: Setup & Bot Status -->
+      <section class="card config-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-icon">⚡</span>
+            <h2>Cấu Hình Webhook 1-Click</h2>
+          </div>
+          <span class="card-tag">Tự Động</span>
+        </div>
+        
+        <p class="card-desc">
+          Zalo sẽ tự động gửi câu hỏi từ nhóm hoặc cá nhân đến đường dẫn Webhook này để Gemini AI giải đáp.
+        </p>
+
+        <form id="webhook-form" class="form-group">
+          <label for="webhook-url">Đường dẫn Webhook công khai (HTTPS):</label>
+          <div class="input-with-button">
+            <input 
+              type="url" 
+              id="webhook-url" 
+              placeholder="https://ten-du-an.vercel.app/api/webhook" 
+              required
+            >
+            <button type="button" id="btn-use-current-domain" class="btn btn-secondary btn-sm" title="Tự động lấy domain hiện tại">
+              Lấy Domain Này
+            </button>
+          </div>
+
+          <label for="secret-token">Khóa bí mật Webhook (Secret Token - Tùy chọn):</label>
+          <input 
+            type="text" 
+            id="secret-token" 
+            placeholder="Để trống nếu không cấu hình WEBHOOK_SECRET"
+          >
+
+          <div class="btn-group">
+            <button type="submit" id="btn-set-webhook" class="btn btn-primary">
+              <span class="btn-icon">🚀</span> Kích Hoạt Webhook Lên Zalo
+            </button>
+            <button type="button" id="btn-test-webhook" class="btn btn-outline">
+              <span class="btn-icon">🔍</span> Kiểm Tra Kết Nối (testWebhook)
+            </button>
+          </div>
+        </form>
+
+        <div id="webhook-result" class="result-box hidden"></div>
+
+        <!-- Bot Identity Preview -->
+        <div class="bot-profile-box" id="bot-profile-box">
+          <div class="profile-header">
+            <span class="sub-label">THÔNG TIN BOT ZALO</span>
+            <button id="btn-refresh-info" class="btn-text">Làm mới ↻</button>
+          </div>
+          <div class="profile-content" id="profile-details">
+            <div class="loading-spinner-small"></div> Đang kiểm tra token...
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Interactive AI Playground -->
+      <section class="card chat-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-icon">✨</span>
+            <h2>Thử Nghiệm Trực Tiếp Gemini AI</h2>
+          </div>
+          <span class="card-tag model-tag" id="current-model-tag">gemini-2.5-flash</span>
+        </div>
+
+        <p class="card-desc">
+          Thử đặt câu hỏi để kiểm tra định dạng phản hồi tối ưu cho Zalo trước khi chạy trong nhóm thực tế.
+        </p>
+
+        <div class="chat-viewport" id="chat-viewport">
+          <div class="chat-message bot-msg">
+            <div class="msg-avatar">🤖</div>
+            <div class="msg-bubble">
+              <div class="msg-author">Zalo Gemini Bot</div>
+              <div class="msg-text">
+                Chào bạn! Mình là AI hỗ trợ nhóm Zalo. Bạn hãy thử gõ câu hỏi bất kỳ vào ô bên dưới để xem tốc độ và cách mình trả lời nhé!
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <form id="chat-form" class="chat-input-form">
+          <div class="chat-input-wrapper">
+            <input 
+              type="text" 
+              id="chat-input" 
+              placeholder="Nhập câu hỏi test (ví dụ: Tóm tắt 3 lưu ý khi làm việc nhóm)..." 
+              autocomplete="off"
+              required
+            >
+            <button type="submit" id="btn-send-chat" class="btn btn-primary btn-icon-only" aria-label="Gửi tin nhắn">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+              </svg>
+            </button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <!-- Bottom Section: Quick Step-by-Step Guide -->
+    <section class="card guide-card">
+      <div class="card-header">
+        <div class="card-title-group">
+          <span class="card-icon">📚</span>
+          <h2>3 Bước Tích Hợp Vào Nhóm Zalo & Vercel Hoàn Chỉnh</h2>
+        </div>
+      </div>
+
+      <div class="guide-steps">
+        <div class="step-item">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <h3>Khai Báo Biến Môi Trường Trên Vercel</h3>
+            <p>Vào <strong>Vercel Dashboard &gt; Project Settings &gt; Environment Variables</strong>, điền 2 biến:</p>
+            <div class="code-snippet">
+              <code>ZALO_BOT_TOKEN=token_bot_cua_ban</code>
+              <code>GEMINI_API_KEY=khoa_api_gemini_cua_ban</code>
+              <button class="btn-copy" onclick="copyEnvTemplate()">Copy Mẫu</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <h3>Kích Hoạt Webhook</h3>
+            <p>Sau khi deploy lên Vercel thành công, mở trang này trên domain Vercel, bấm nút <strong>"Lấy Domain Này"</strong> và bấm <strong>"Kích Hoạt Webhook Lên Zalo"</strong> ở ô bên trên.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <h3>Cho Bot Vào Nhóm & Sử Dụng</h3>
+            <p>Lấy link mời Bot từ Zalo Bot Creator, gửi vào nhóm Zalo và mời bot vào. Khi cần hỏi bot:</p>
+            <ul>
+              <li>Gõ <strong>@Tên_Bot</strong> kèm câu hỏi (ví dụ: <code>@Bot tính giúp mình lãi suất kép...</code>)</li>
+              <li>Hoặc <strong>Trả lời (Reply)</strong> trực tiếp vào tin nhắn của Bot.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>Hệ thống Bot Chat Zalo AI • Powered by Google Gemini 2.5 Flash & Vercel Serverless Functions</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

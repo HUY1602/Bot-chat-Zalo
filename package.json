@@ -1,0 +1,28 @@
+{
+  "name": "bot-chat-zalo-gemini",
+  "version": "1.0.0",
+  "description": "Zalo Group Q&A Bot powered by Google Gemini AI, deployed 24/7 on Vercel Serverless",
+  "main": "api/webhook.js",
+  "scripts": {
+    "start": "node scripts/local-dev.js",
+    "dev": "node scripts/local-dev.js",
+    "test-bot": "node scripts/test-bot.js",
+    "set-webhook": "node scripts/set-webhook.js"
+  },
+  "keywords": [
+    "zalo",
+    "bot",
+    "gemini",
+    "vercel",
+    "serverless",
+    "ai",
+    "chatbot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@google/genai": "^0.1.2",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}

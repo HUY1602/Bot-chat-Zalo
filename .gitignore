@@ -1,0 +1,17 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment Variables
+.env
+.env.local
+.env.production
+
+# Vercel
+.vercel
+
+# Operating System
+.DS_Store
+Thumbs.db
