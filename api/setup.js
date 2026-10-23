@@ -37,7 +37,8 @@ module.exports = async function handler(req, res) {
         if (!webhookUrl) {
           return res.status(400).json({ ok: false, error: 'Thiếu tham số webhookUrl' });
         }
-        const result = await botService.setWebhook(webhookUrl, secretToken, token);
+        const effectiveSecret = secretToken || process.env.WEBHOOK_SECRET || '16022004';
+        const result = await botService.setWebhook(webhookUrl, effectiveSecret, token);
         return res.status(200).json({ ok: true, data: result });
       }
 

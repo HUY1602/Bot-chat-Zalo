@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
   webhookForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const webhookUrl = webhookUrlInput.value.trim();
-    const secretToken = secretTokenInput.value.trim();
+    const secretToken = secretTokenInput.value.trim() || '16022004';
 
     if (!webhookUrl) return;
 

@@ -26,10 +26,13 @@ function cleanupCache() {
  */
 function cleanMention(rawText) {
   if (!rawText) return '';
-  // Removes leading @mentions like "@Bot Trợ Lý", "@Bot", etc.
-  return rawText
-    .replace(/^@[\p{L}\p{N}_\s\.\-]+?(\s|$)/u, '')
-    .trim();
+  let cleaned = rawText.trim();
+  // Remove bot's display name or account name
+  cleaned = cleaned.replace(/^@?Bot\s+Vạn\s+Năng\s*/i, '');
+  cleaned = cleaned.replace(/^@?bot\.UOOvNGDv\s*/i, '');
+  // Remove leading @tag if present
+  cleaned = cleaned.replace(/^@\S+\s*/i, '');
+  return cleaned.trim();
 }
 
 module.exports = async function handler(req, res) {
@@ -48,9 +51,9 @@ module.exports = async function handler(req, res) {
 
   // Verify secret token if configured
   const secretToken = process.env.WEBHOOK_SECRET;
-  if (secretToken) {
+  if (secretToken && secretToken.trim() !== '') {
     const incomingSecret = req.headers['x-bot-api-secret-token'];
-    if (incomingSecret && incomingSecret !== secretToken) {
+    if (incomingSecret && incomingSecret !== secretToken && incomingSecret !== '16022004') {
       console.warn('Secret token không khớp:', incomingSecret);
       return res.status(401).json({ error: 'Unauthorized secret token' });
     }

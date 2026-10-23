@@ -26,16 +26,14 @@ async function getBotInfo(token = process.env.ZALO_BOT_TOKEN) {
  * @param {string} secretToken - Optional secret token
  * @param {string} token - Bot Token
  */
-async function setWebhook(webhookUrl, secretToken = process.env.WEBHOOK_SECRET, token = process.env.ZALO_BOT_TOKEN) {
+async function setWebhook(webhookUrl, secretToken = process.env.WEBHOOK_SECRET || 'zalo_gemini_secret_token', token = process.env.ZALO_BOT_TOKEN) {
   if (!token) throw new Error('ZALO_BOT_TOKEN is not defined');
   const url = `${ZALO_API_BASE}${token}/setWebhook`;
   
   const payload = {
-    url: webhookUrl
+    url: webhookUrl,
+    secret_token: secretToken || process.env.WEBHOOK_SECRET || 'zalo_gemini_secret_token'
   };
-  if (secretToken) {
-    payload.secret_token = secretToken;
-  }
 
   const res = await fetch(url, {
     method: 'POST',
