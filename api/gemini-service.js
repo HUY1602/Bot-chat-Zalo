@@ -84,17 +84,61 @@ function formatForZalo(text) {
 }
 
 /**
+ * Prepare and sanitize contents array for Gemini API multi-turn chat
+ * Ensures valid role alternation: user -> model -> user
+ */
+function prepareContents(prompt, history = []) {
+  if (!history || !Array.isArray(history) || history.length === 0) {
+    return [{ role: 'user', parts: [{ text: prompt }] }];
+  }
+
+  const valid = [];
+  let expectedRole = 'user';
+
+  for (const turn of history) {
+    if (turn && turn.role === expectedRole && turn.parts?.[0]?.text) {
+      valid.push({
+        role: turn.role,
+        parts: [{ text: turn.parts[0].text }]
+      });
+      expectedRole = expectedRole === 'user' ? 'model' : 'user';
+    }
+  }
+
+  // Ensure current prompt is added as user turn
+  if (expectedRole === 'user') {
+    valid.push({
+      role: 'user',
+      parts: [{ text: prompt }]
+    });
+  } else {
+    // If last turn was user, append current prompt into it
+    const last = valid[valid.length - 1];
+    if (last && last.role === 'user') {
+      last.parts[0].text += `\n${prompt}`;
+    } else {
+      valid.push({
+        role: 'user',
+        parts: [{ text: prompt }]
+      });
+    }
+  }
+
+  return valid;
+}
+
+/**
  * Call Gemini REST API directly for maximum speed and zero dependencies
  */
-async function callGeminiRest(model, prompt, apiKey, systemInstruction) {
+async function callGeminiRest(model, promptOrContents, apiKey, systemInstruction) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
+  const contents = Array.isArray(promptOrContents)
+    ? promptOrContents
+    : [{ role: 'user', parts: [{ text: promptOrContents }] }];
+
   const body = {
-    contents: [
-      {
-        parts: [{ text: prompt }]
-      }
-    ],
+    contents,
     generationConfig: {
       temperature: 0.7,
       maxOutputTokens: 1500
@@ -128,9 +172,9 @@ async function callGeminiRest(model, prompt, apiKey, systemInstruction) {
 }
 
 /**
- * Generate answer from Gemini for a given prompt
+ * Generate answer from Gemini for a given prompt (with optional conversation history)
  * @param {string} prompt - User question or query
- * @param {object} options - Optional parameters
+ * @param {object} options - Optional parameters { apiKey, model, systemInstruction, history }
  * @returns {Promise<string>}
  */
 async function generateAnswer(prompt, options = {}) {
@@ -142,9 +186,12 @@ async function generateAnswer(prompt, options = {}) {
   const modelName = options.model || DEFAULT_MODEL;
   const systemInstruction = options.systemInstruction || process.env.SYSTEM_INSTRUCTION || DEFAULT_SYSTEM_INSTRUCTION;
 
+  // Prepare multi-turn contents if history exists
+  const contents = prepareContents(prompt, options.history);
+
   // Try configured model first
   try {
-    return await callGeminiRest(modelName, prompt, apiKey, systemInstruction);
+    return await callGeminiRest(modelName, contents, apiKey, systemInstruction);
   } catch (primaryErr) {
     console.warn(`Model ${modelName} gặp lỗi: ${primaryErr.message}. Đang thử fallback...`);
 
@@ -153,7 +200,7 @@ async function generateAnswer(prompt, options = {}) {
       if (fallback === modelName) continue;
       try {
         console.log(`Đang thử fallback model ${fallback}...`);
-        return await callGeminiRest(fallback, prompt, apiKey, systemInstruction);
+        return await callGeminiRest(fallback, contents, apiKey, systemInstruction);
       } catch (fbErr) {
         console.warn(`Fallback ${fallback} thất bại: ${fbErr.message}`);
       }

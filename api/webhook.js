@@ -5,6 +5,7 @@
 
 const botService = require('./bot-service');
 const geminiService = require('./gemini-service');
+const memoryService = require('./memory-service');
 
 // Cache to prevent duplicate processing from webhook retries
 const processedMessageIds = new Map();
@@ -114,16 +115,25 @@ module.exports = async function handler(req, res) {
   console.log(`[Chat ${chatId} (${chatType})] Từ ${senderName}: "${rawText}" -> Câu hỏi: "${userQuery}"`);
 
   try {
+    // 0. Built-in command: /reset, /clear hoặc /forget (xóa bộ nhớ trò chuyện)
+    if (userQuery === '/reset' || userQuery === '/clear' || userQuery === '/forget' || userQuery === '/quen') {
+      await memoryService.clearHistory(chatId);
+      const resetText = `Dạ em đã làm mới bộ nhớ của nhóm mình rồi nè anh! Giờ tụi mình bắt đầu câu chuyện mới nghen 🫧✨`;
+      await botService.sendMessage(chatId, resetText, msgId);
+      return res.status(200).json({ ok: true });
+    }
+
     // 1. Built-in command: /start hoặc /help
     if (userQuery === '/start' || userQuery === '/help' || userQuery === '!help') {
-      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh cần gì cứ hỏi em nha!\n\n📌 Cách gọi em:\n• Gõ @tên_bot kèm câu hỏi\n• Hoặc bấm Trả lời (Reply) vào tin nhắn của em\n• Gõ /ping để kiểm tra em còn thức không hihi\n• Gõ /help để xem lại hướng dẫn này`;
+      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh cần gì cứ hỏi em nha!\n\n📌 Cách gọi em:\n• Gõ @tên_bot kèm câu hỏi\n• Hoặc bấm Trả lời (Reply) vào tin nhắn của em\n• Gõ /ping để kiểm tra em còn thức không hihi\n• Gõ /reset để làm mới bộ nhớ trò chuyện\n• Gõ /help để xem lại hướng dẫn này`;
       await botService.sendMessage(chatId, helpText, msgId);
       return res.status(200).json({ ok: true });
     }
 
     // 2. Built-in command: /ping
     if (userQuery === '/ping') {
-      const pingText = `🏓 Pong! Em vẫn ở đây nè ⚡ Hệ thống chạy mượt lắm ạ 🫧`;
+      const memStatus = memoryService.getMemoryStatus();
+      const pingText = `🏓 Pong! Em vẫn ở đây nè ⚡ Hệ thống chạy mượt lắm ạ 🫧\n💾 Bộ nhớ: ${memStatus.provider}`;
       await botService.sendMessage(chatId, pingText, msgId);
       return res.status(200).json({ ok: true });
     }
@@ -135,10 +145,23 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // 4. Gửi câu hỏi đến Gemini AI
-    const aiAnswer = await geminiService.generateAnswer(userQuery);
+    // 4. Lấy lịch sử hội thoại gần nhất của chat này
+    const history = await memoryService.getHistory(chatId);
 
-    // 5. Gửi câu trả lời về cho nhóm hoặc chat 1-1
+    // Gắn tên người gửi vào câu hỏi để bot phân biệt ai đang nói trong nhóm
+    const contextualQuery = chatType === 'group'
+      ? `${senderName}: ${userQuery}`
+      : userQuery;
+
+    // 5. Gửi câu hỏi đến Gemini AI kèm lịch sử
+    const aiAnswer = await geminiService.generateAnswer(contextualQuery, {
+      history
+    });
+
+    // 6. Lưu câu hỏi và câu trả lời vào bộ nhớ
+    await memoryService.addTurn(chatId, contextualQuery, aiAnswer);
+
+    // 7. Gửi câu trả lời về cho nhóm hoặc chat 1-1
     await botService.sendMessage(chatId, aiAnswer, msgId);
 
     return res.status(200).json({ ok: true });

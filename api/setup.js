@@ -6,15 +6,19 @@
 
 const botService = require('./bot-service');
 const geminiService = require('./gemini-service');
+const memoryService = require('./memory-service');
 
 module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
+    const memStatus = memoryService.getMemoryStatus();
     return res.status(200).json({
       ok: true,
       env: {
         hasZaloToken: Boolean(process.env.ZALO_BOT_TOKEN),
         hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
         hasWebhookSecret: Boolean(process.env.WEBHOOK_SECRET),
+        hasUpstashRedis: memStatus.isUpstash,
+        memoryProvider: memStatus.provider,
         geminiModel: process.env.GEMINI_MODEL || geminiService.DEFAULT_MODEL
       }
     });
