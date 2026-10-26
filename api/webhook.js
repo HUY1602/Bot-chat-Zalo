@@ -92,7 +92,7 @@ module.exports = async function handler(req, res) {
   const chat = message.chat || {};
   const chatId = chat.id || event.sender?.id || payload.chat_id;
   const chatType = chat.type || chat.chat_type || 'group';
-  const senderName = message.from?.display_name || event.sender?.name || 'anh/chị';
+  const senderName = message.from?.display_name || event.sender?.name || 'anh';
 
   if (!chatId) {
     console.warn('Không tìm thấy chat_id trong payload!');
@@ -116,7 +116,7 @@ module.exports = async function handler(req, res) {
   try {
     // 1. Built-in command: /start hoặc /help
     if (userQuery === '/start' || userQuery === '/help' || userQuery === '!help') {
-      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh/chị cần gì cứ hỏi em nha!\n\n📌 Cách gọi em:\n• Gõ @tên_bot kèm câu hỏi\n• Hoặc bấm Trả lời (Reply) vào tin nhắn của em\n• Gõ /ping để kiểm tra em còn thức không hihi\n• Gõ /help để xem lại hướng dẫn này`;
+      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh cần gì cứ hỏi em nha!\n\n📌 Cách gọi em:\n• Gõ @tên_bot kèm câu hỏi\n• Hoặc bấm Trả lời (Reply) vào tin nhắn của em\n• Gõ /ping để kiểm tra em còn thức không hihi\n• Gõ /help để xem lại hướng dẫn này`;
       await botService.sendMessage(chatId, helpText, msgId);
       return res.status(200).json({ ok: true });
     }
@@ -130,7 +130,7 @@ module.exports = async function handler(req, res) {
 
     // 3. Nếu người dùng chỉ tag bot mà không hỏi gì
     if (!userQuery) {
-      const emptyText = `Dạ, ${senderName} gọi em ạ? 🫧 Anh/chị cần hỏi gì cứ nhắn cho em nha!`;
+      const emptyText = `Dạ, ${senderName} gọi em ạ? 🫧 Anh cần hỏi gì cứ nhắn cho em nha!`;
       await botService.sendMessage(chatId, emptyText, msgId);
       return res.status(200).json({ ok: true });
     }
@@ -147,7 +147,7 @@ module.exports = async function handler(req, res) {
 
     // Thông báo lỗi thân thiện cho người dùng nếu xảy ra sự cố
     try {
-      const errorMsg = `Ui, em bị lỗi rồi ${senderName} ơi 🥺 (${err.message}). Anh/chị thử nhắn lại sau chút nha!`;
+      const errorMsg = `Ui, em bị lỗi rồi ${senderName} ơi 🥺 (${err.message}). Anh thử nhắn lại sau chút nha!`;
       await botService.sendMessage(chatId, errorMsg, msgId);
     } catch (sendErr) {
       console.error('Không thể gửi tin nhắn báo lỗi:', sendErr);
