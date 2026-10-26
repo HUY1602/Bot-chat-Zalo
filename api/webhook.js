@@ -104,21 +104,21 @@ module.exports = async function handler(req, res) {
   try {
     // 1. Built-in command: /start hoặc /help
     if (userQuery === '/start' || userQuery === '/help' || userQuery === '!help') {
-      const helpText = `👋 Xin chào ${senderName} nè! 🥰\n\nMình là Trợ lý AI Zalo siêu dễ thương trong nhóm của bạn đây 🌸✨\n(Bạn cũng có thể gọi mình là Em Trợ Lý hay Trợ lý Mây nha!)\n\n📌 Cách trò chuyện cùng mình:\n• Gõ @tên_bot kèm câu hỏi hoặc lời nhắn của bạn nè\n• Hoặc bấm Trả lời (Reply) vào bất kỳ tin nhắn nào của mình\n• Gõ /ping để kiểm tra tốc độ phản hồi\n• Gõ /help để mở lại bảng hướng dẫn này nè\n\nBạn cứ tự nhiên nhắn tin nha, em luôn sẵn sàng lắng nghe và hỗ trợ bạn 24/7 nè! 💕 Hôm nay mình có thể hỗ trợ gì cho bạn không ạ? 😊`;
+      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh/chị cần gì cứ hỏi em nha!\n\n📌 Cách gọi em:\n• Gõ @tên_bot kèm câu hỏi\n• Hoặc bấm Trả lời (Reply) vào tin nhắn của em\n• Gõ /ping để kiểm tra em còn thức không hihi\n• Gõ /help để xem lại hướng dẫn này`;
       await botService.sendMessage(chatId, helpText, msgId);
       return res.status(200).json({ ok: true });
     }
 
     // 2. Built-in command: /ping
     if (userQuery === '/ping') {
-      const pingText = `🏓 Pong nè! ⚡\nEm Trợ Lý AI Zalo vẫn đang hoạt động siêu mượt mà và sẵn sàng hỗ trợ bạn rồi nha! 🥰✨`;
+      const pingText = `🏓 Pong! Em vẫn ở đây nè ⚡ Hệ thống chạy mượt lắm ạ 🫧`;
       await botService.sendMessage(chatId, pingText, msgId);
       return res.status(200).json({ ok: true });
     }
 
     // 3. Nếu người dùng chỉ tag bot mà không hỏi gì
     if (!userQuery) {
-      const emptyText = `Dạ em nghe đây ${senderName} ơi! 🥰 Bạn cần em hỗ trợ hoặc tâm sự điều gì cứ nhắn cho em nè, em thưa liền nha! 💕✨`;
+      const emptyText = `Dạ, ${senderName} gọi em ạ? 🫧 Anh/chị cần hỏi gì cứ nhắn cho em nha!`;
       await botService.sendMessage(chatId, emptyText, msgId);
       return res.status(200).json({ ok: true });
     }
@@ -135,7 +135,7 @@ module.exports = async function handler(req, res) {
 
     // Thông báo lỗi thân thiện cho người dùng nếu xảy ra sự cố
     try {
-      const errorMsg = `Dạ xin lỗi ${senderName} nha, hiện tại em đang hơi chóng mặt xíu nên gặp gián đoạn tạm thời (${err.message}) 🥺. Bạn đợi em một xíu rồi nhắn lại cho em nhé, thương thương nè! 💕`;
+      const errorMsg = `Ui, em bị lỗi rồi ${senderName} ơi 🥺 (${err.message}). Anh/chị thử nhắn lại sau chút nha!`;
       await botService.sendMessage(chatId, errorMsg, msgId);
     } catch (sendErr) {
       console.error('Không thể gửi tin nhắn báo lỗi:', sendErr);
