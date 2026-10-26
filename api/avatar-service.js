@@ -52,19 +52,21 @@ function isBotPhotoRequest(text) {
     return false;
   }
 
+  // Nếu là câu yêu cầu vẽ tranh / tạo ảnh thì không phải là xem ảnh đại diện của bot
+  if (/^(?:\/draw|\/image|\/ve|\/paint|vẽ|tạo\s+ảnh|tạo\s+hình|sinh\s+ảnh)/i.test(raw)) {
+    return false;
+  }
+
   // 2. Yêu cầu trực tiếp xem mặt / hình / ảnh / avatar / dung nhan
   // Ví dụ: "cho xem mặt", "cho anh xem ảnh", "cho mình xin tấm hình", "xem mặt bot", "gửi ảnh em"
-  const requestVerb = '(?:cho|xin|muon|duoc|gui|chup|bat|show|send|coi|ngam|xem)';
-  const requestVerbWithTone = '(?:cho|xin|muốn|được|gửi|chụp|bật|show|send|coi|ngắm|xem)';
-  const photoSubject = '(?:mat|hinh|anh|anh dai dien|hinh dai dien|avatar|dung nhan|nhan sac|chan dung|selfie|khuon mat|dien mao)';
+  const requestVerbWithTone = '(?:cho\\s+(?:anh|chị|em|mình|tôi|tao)?\\s*(?:xem|coi|ngắm|xin)|xem|coi|ngắm|xin|gửi|show|chụp|bật)';
+  const requestVerbNoTone = '(?:cho\\s+(?:anh|chi|em|minh|toi|tao)?\\s*(?:xem|coi|ngam|xin)|xem|coi|ngam|xin|gui|show|chup|bat)';
   const photoSubjectWithTone = '(?:mặt|hình|ảnh|ảnh đại diện|hình đại diện|avatar|dung nhan|nhan sắc|chân dung|selfie|khuôn mặt|diện mạo)';
-  const botTarget = '(?:bot|em|ban|be|cau|may|ad|admin)?';
-  const botTargetWithTone = '(?:bot|em|bạn|bé|cậu|mày|ad|admin)?';
+  const photoSubjectNoTone = '(?:mat|hinh|anh|anh dai dien|hinh dai dien|avatar|dung nhan|nhan sac|chan dung|selfie|khuon mat|dien mao)';
 
   // Câu có chứa cụm yêu cầu xem mặt/ảnh:
-  // "cho xem mặt", "cho anh xem ảnh", "cho chị xem hình", "xin ảnh bot", "gửi ảnh bot"
   const directRequestPattern = new RegExp(
-    `(?:${requestVerbWithTone}|xem|coi|ngắm|xin|gửi)\\s+(?:anh|chị|em|mình|tôi|tao|nào|đi|nhé|nha|với)?\\s*(?:tấm|bức|kiểu|cái)?\\s*${photoSubjectWithTone}`,
+    `${requestVerbWithTone}\\s+(?:tấm|bức|kiểu|cái)?\\s*${photoSubjectWithTone}`,
     'i'
   );
   if (directRequestPattern.test(raw)) {
@@ -73,7 +75,7 @@ function isBotPhotoRequest(text) {
 
   // Kiểm tra phiên bản không dấu
   const directRequestPatternNoTone = new RegExp(
-    `(?:${requestVerb}|xem|coi|ngam|xin|gui)\\s+(?:anh|chi|em|minh|toi|tao|nao|di|nhe|nha|voi)?\\s*(?:tam|buc|kieu|cai)?\\s*${photoSubject}`,
+    `${requestVerbNoTone}\\s+(?:tam|buc|kieu|cai)?\\s*${photoSubjectNoTone}`,
     'i'
   );
   if (directRequestPatternNoTone.test(noTone)) {
@@ -90,7 +92,7 @@ function isBotPhotoRequest(text) {
   }
 
   const possessivePatternNoTone = new RegExp(
-    `${photoSubject}\\s+(?:cua\\s+)?(?:bot|em|ban|be|cau|may|ad)`,
+    `${photoSubjectNoTone}\\s+(?:cua\\s+)?(?:bot|em|ban|be|cau|may|ad)`,
     'i'
   );
   if (possessivePatternNoTone.test(noTone)) {

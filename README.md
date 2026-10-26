@@ -8,6 +8,8 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 
 - ⚡ **Chạy 24/7 Miễn Phí Trên Vercel**: Sử dụng Vercel Serverless Function, tự động scale, không tốn chi phí server hay VPS.
 - 🧠 **Tích hợp Google Gemini 2.5 Flash**: Phản hồi siêu nhanh (500ms - 1.5s), thông minh, xử lý đa lĩnh vực bằng tiếng Việt tự nhiên.
+- 🎨 **Tạo Ảnh & Vẽ Tranh AI (Text-to-Image)**: Tự động nhận diện yêu cầu vẽ tranh tiếng Việt (`vẽ...` hoặc `/draw...`), tối ưu hóa prompt qua Gemini và tạo tác phẩm nghệ thuật 8K sắc nét (mô hình Flux) gửi trực tiếp vào nhóm Zalo.
+- 📸 **Gửi Ảnh Đại Diện Tự Động**: Khi thành viên yêu cầu xem mặt / xem hình / xem ảnh của bot, bot sẽ gửi ngay ảnh đại diện kèm lời chào dễ thương.
 - 👥 **Hỗ Trợ Nhóm Chat Zalo Tuyệt Vời**:
   - Nhận diện khi được thành viên **@mention** (`@Tên_Bot [câu hỏi]`).
   - Tự động bắt sự kiện khi thành viên **Reply (Trả lời)** vào tin nhắn của bot.
@@ -87,8 +89,10 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 2. Lấy **Liên kết mời bot (Invite Link)** và gửi vào nhóm Zalo bạn muốn bot tham gia.
 3. Trưởng nhóm xác nhận thêm Bot vào nhóm.
 4. **Cách trò chuyện với Bot trong nhóm:**
-   - Tag tên bot: `@Tên_Bot giải thích ngắn gọn về định luật vạn vật hấp dẫn`
+   - Tag tên bot để hỏi đáp: `@Tên_Bot giải thích ngắn gọn về định luật vạn vật hấp dẫn`
    - Hoặc bấm **Trả lời (Reply)** vào bất kỳ câu nói nào của Bot.
+   - **Vẽ tranh AI:** `@Tên_Bot vẽ chú mèo phi hành gia ngoài vũ trụ` hoặc `/draw phong cảnh anime...`
+   - **Xem ảnh đại diện của Bot:** `cho xem ảnh bot`, `xem mặt bot`, `gửi ảnh em`
    - Gõ `/help` để xem hướng dẫn sử dụng.
    - Gõ `/ping` để kiểm tra trạng thái hoạt động của Bot.
 

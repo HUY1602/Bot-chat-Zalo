@@ -5,6 +5,7 @@
 
 const geminiService = require('./gemini-service');
 const avatarService = require('./avatar-service');
+const imageService = require('./image-service');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -27,6 +28,23 @@ module.exports = async function handler(req, res) {
       photoUrl: avatarUrl,
       durationMs: 40
     });
+  }
+
+  // Nếu người dùng test vẽ tranh / tạo ảnh AI
+  if (imageService.isDrawRequest(message)) {
+    const startTime = Date.now();
+    try {
+      const { imageUrl, caption } = await imageService.generateArtwork(message, 'Bạn');
+      const duration = Date.now() - startTime;
+      return res.status(200).json({
+        ok: true,
+        answer: caption,
+        photoUrl: imageUrl,
+        durationMs: duration
+      });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: `Lỗi tạo ảnh: ${err.message}` });
+    }
   }
 
   try {

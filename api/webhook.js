@@ -7,6 +7,7 @@ const botService = require('./bot-service');
 const geminiService = require('./gemini-service');
 const memoryService = require('./memory-service');
 const avatarService = require('./avatar-service');
+const imageService = require('./image-service');
 
 // Cache to prevent duplicate processing from webhook retries
 const processedMessageIds = new Map();
@@ -129,7 +130,7 @@ module.exports = async function handler(req, res) {
 
     // 1. Built-in command: /start hoặc /help
     if (userQuery === '/start' || userQuery === '/help' || userQuery === '!help') {
-      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh/chị cần gì cứ hỏi em nha!\n\n📌 Cách gọi em:\n• Gõ @tên_bot kèm câu hỏi\n• Hoặc bấm Trả lời (Reply) vào tin nhắn của em\n• Gõ /ping để kiểm tra em còn thức không hihi\n• Gõ /reset để làm mới bộ nhớ trò chuyện\n• Gõ /help để xem lại hướng dẫn này`;
+      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh/chị cần gì cứ hỏi em nha!\n\n📌 Các tính năng của em:\n• Hỏi đáp thông minh: Gõ @tên_bot kèm câu hỏi hoặc Reply tin nhắn của em\n• Vẽ tranh AI: Gõ "vẽ + mô tả" (ví dụ: vẽ chú mèo phi hành gia) hoặc "/draw ..."\n• Xem ảnh của em: Gõ "cho xem ảnh bot", "xem mặt bot"\n• /ping: Kiểm tra bot còn hoạt động không\n• /reset: Làm mới bộ nhớ trò chuyện\n• /help: Xem lại hướng dẫn này`;
       await botService.sendMessage(chatId, helpText, msgId);
       return res.status(200).json({ ok: true });
     }
@@ -171,6 +172,40 @@ module.exports = async function handler(req, res) {
       );
 
       return res.status(200).json({ ok: true, action: 'sendPhoto' });
+    }
+
+    // 2.6 Yêu cầu vẽ tranh / tạo ảnh AI
+    if (imageService.isDrawRequest(userQuery)) {
+      console.log(`[Image Request] ${senderName} yêu cầu vẽ tranh: "${userQuery}"`);
+      try {
+        const { imageUrl, rawPrompt, caption } = await imageService.generateArtwork(userQuery, senderName);
+        console.log(`[Image Generated] URL: ${imageUrl}`);
+
+        const sendResult = await botService.sendPhoto(chatId, imageUrl, caption, msgId);
+        console.log('Kết quả sendPhoto tạo ảnh:', JSON.stringify(sendResult));
+
+        if (sendResult && sendResult.ok === false) {
+          console.warn('sendPhoto tạo ảnh trả về ok=false, fallback sang sendMessage:', sendResult.description || sendResult.error);
+          await botService.sendMessage(chatId, `${caption}\n\n🔗 Bấm vào đây để xem ảnh nét căng: ${imageUrl}`, msgId);
+        }
+
+        // Lưu vào bộ nhớ hội thoại
+        await memoryService.addTurn(
+          chatId,
+          `[${senderName}]: ${userQuery}`,
+          `[Em đã vẽ tranh "${rawPrompt}" và gửi ảnh thành công cho ${senderName}]`
+        );
+
+        return res.status(200).json({ ok: true, action: 'generateArtwork' });
+      } catch (drawErr) {
+        console.error('Lỗi khi vẽ tranh AI:', drawErr);
+        await botService.sendMessage(
+          chatId,
+          `Ui, em vẽ tranh bị vướng chút trục trặc rồi ${senderName} ơi 🥺 (${drawErr.message}). Anh/chị thử lại sau một lát nha!`,
+          msgId
+        );
+        return res.status(200).json({ ok: false, error: drawErr.message });
+      }
     }
 
     // 3. Nếu người dùng chỉ tag bot mà không hỏi gì
