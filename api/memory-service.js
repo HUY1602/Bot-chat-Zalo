@@ -173,11 +173,67 @@ function getMemoryStatus() {
   };
 }
 
+/**
+ * Get all active chat sessions and their stored memory data
+ */
+async function getAllChats() {
+  const result = [];
+
+  // 1. If Upstash Redis is configured
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    try {
+      const keys = await upstashCommand(['KEYS', 'zalo:chat:*']);
+      if (Array.isArray(keys) && keys.length > 0) {
+        for (const k of keys) {
+          const chatId = k.replace('zalo:chat:', '');
+          const [rawHistory, ttl] = await Promise.all([
+            upstashCommand(['GET', k]),
+            upstashCommand(['TTL', k])
+          ]);
+          let messages = [];
+          try {
+            messages = typeof rawHistory === 'string' ? JSON.parse(rawHistory) : (rawHistory || []);
+          } catch (e) {}
+
+          result.push({
+            chatId,
+            key: k,
+            ttlSeconds: ttl || 0,
+            messageCount: messages.length,
+            messages
+          });
+        }
+        return result;
+      }
+    } catch (err) {
+      console.warn('Lỗi lấy danh sách keys từ Upstash:', err.message);
+    }
+  }
+
+  // 2. Fallback to in-memory store
+  const now = Date.now();
+  for (const [k, v] of inMemoryStore.entries()) {
+    if (now < v.expiresAt) {
+      result.push({
+        chatId: k.replace('zalo:chat:', ''),
+        key: k,
+        ttlSeconds: Math.round((v.expiresAt - now) / 1000),
+        messageCount: (v.messages || []).length,
+        messages: v.messages || []
+      });
+    }
+  }
+
+  return result;
+}
+
 module.exports = {
   getHistory,
   addTurn,
   clearHistory,
+  getAllChats,
   getMemoryStatus,
   MAX_HISTORY_MESSAGES,
   DEFAULT_TTL_SECONDS
 };
+

@@ -11,6 +11,7 @@ const path = require('path');
 const webhookHandler = require('../api/webhook');
 const setupHandler = require('../api/setup');
 const testChatHandler = require('../api/test-chat');
+const memoryHandler = require('../api/memory');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -25,6 +26,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.all('/api/webhook', (req, res) => webhookHandler(req, res));
 app.all('/api/setup', (req, res) => setupHandler(req, res));
 app.all('/api/test-chat', (req, res) => testChatHandler(req, res));
+app.all('/api/memory', (req, res) => memoryHandler(req, res));
 
 app.listen(PORT, () => {
   console.log(`\n🚀 Zalo Bot Dev Server đang chạy tại: http://localhost:${PORT}`);
