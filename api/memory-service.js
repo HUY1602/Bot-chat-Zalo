@@ -5,8 +5,8 @@
  * Fallback: In-Memory RAM cache (Active during warm serverless container lifecycle)
  */
 
-const MAX_HISTORY_MESSAGES = 10; // Keep up to 10 messages (5 user + 5 model turns)
-const DEFAULT_TTL_SECONDS = 3600; // 1 hour memory expiration
+const MAX_HISTORY_MESSAGES = parseInt(process.env.MAX_HISTORY_MESSAGES, 10) || 50; // Keep up to 50 messages (25 user + 25 model turns)
+const DEFAULT_TTL_SECONDS = parseInt(process.env.MEMORY_TTL_SECONDS, 10) || (7 * 24 * 60 * 60); // 7 days (1 week) memory expiration
 
 // In-Memory fallback store
 const inMemoryStore = new Map();

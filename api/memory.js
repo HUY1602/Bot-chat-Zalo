@@ -6,6 +6,17 @@
 
 const memoryService = require('./memory-service');
 
+function formatTtl(seconds) {
+  if (!seconds || seconds <= 0) return 'Hết hạn';
+  if (seconds >= 86400) {
+    return `${(seconds / 86400).toFixed(1)} ngày`;
+  }
+  if (seconds >= 3600) {
+    return `${Math.round(seconds / 3600)} giờ`;
+  }
+  return `${Math.round(seconds / 60)} phút`;
+}
+
 module.exports = async function handler(req, res) {
   // Allow clearing memory via POST or DELETE: /api/memory?chatId=xxx
   if (req.method === 'POST' || req.method === 'DELETE') {
@@ -151,7 +162,7 @@ module.exports = async function handler(req, res) {
       <div>
         <h1>🫧 Bộ Nhớ Hội Thoại Bot Zalo</h1>
         <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
-          Nơi lưu trữ: <span class="badge">${status.provider}</span>
+          Nơi lưu trữ: <span class="badge">${status.provider}</span> • Giữ tối đa <strong>50 tin nhắn</strong> • Thời gian lưu <strong>7 ngày</strong>
         </div>
       </div>
       <div>
@@ -171,7 +182,7 @@ module.exports = async function handler(req, res) {
             Chat ID: <span class="chat-id">${c.chatId}</span>
           </div>
           <div class="ttl">
-            ${c.messageCount} tin nhắn • Hết hạn sau ${Math.round(c.ttlSeconds / 60)} phút
+            ${c.messageCount} / 50 tin nhắn • Hết hạn sau ${formatTtl(c.ttlSeconds)}
           </div>
         </div>
         <div class="msg-list">
