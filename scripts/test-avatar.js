@@ -49,15 +49,23 @@ for (const tc of testCases) {
   }
 }
 
-console.log('\n--- KIỂM TRA AVATAR URL & CAPTION ---');
-const url = getBotAvatarUrl();
-console.log('Avatar URL mặc định:', url);
-const caption = getAvatarCaption('Huy');
-console.log('Sample Caption:', caption);
+console.log('\n--- KIỂM TRA AVATAR FOLDER & RANDOM SELECTION ---');
+const { getLocalAvatarFiles, getRandomLocalAvatarFile } = require('../api/avatar-service');
+const files = getLocalAvatarFiles();
+console.log(`Tìm thấy ${files.length} ảnh trong thư mục avatar:`, files);
 
-if (failed === 0) {
-  console.log(`\n🎉 Tất cả ${testCases.length} trường hợp kiểm tra đều ĐẠT xuất sắc!`);
-} else {
+console.log('\nThử nghiệm Random 5 lần:');
+for (let i = 1; i <= 5; i++) {
+  const sampleUrl = getBotAvatarUrl();
+  console.log(` Lần ${i}: ${sampleUrl}`);
+}
+
+const caption = getAvatarCaption('Huy');
+console.log('\nSample Caption:', caption);
+
+if (failed === 0 && files.length > 0) {
+  console.log(`\n🎉 Tất cả ${testCases.length} trường hợp kiểm tra đều ĐẠT xuất sắc! Đã phát hiện ${files.length} ảnh trong folder avatar.`);
+} else if (failed > 0) {
   console.log(`\n⚠️ Có ${failed} trường hợp chưa đạt.`);
   process.exit(1);
 }

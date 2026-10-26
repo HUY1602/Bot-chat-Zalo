@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const systemBadge = document.getElementById('system-badge');
   const systemStatusText = document.getElementById('system-status-text');
   const pulseDot = systemBadge.querySelector('.pulse-dot');
-  
+
   const botProfileBox = document.getElementById('bot-profile-box');
   const profileDetails = document.getElementById('profile-details');
   const btnRefreshInfo = document.getElementById('btn-refresh-info');
@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load Bot Profile from Zalo
   async function loadBotInfo(envInfo = {}) {
     profileDetails.innerHTML = `<div class="loading-spinner-small"></div> Đang tải thông tin bot...`;
-    
+
     try {
       const res = await fetch('/api/setup', {
         method: 'POST',
@@ -81,13 +81,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const botName = bot.name || bot.display_name || bot.username || 'Zalo Bot';
         const botId = bot.id || bot.bot_id || 'Chưa định danh';
 
+        const avatarLabel = envInfo.hasCustomAvatar
+          ? (envInfo.avatarCount > 1
+            ? `📁 ${envInfo.avatarCount} ảnh (Random 🎲)`
+            : (envInfo.localAvatarFile ? `📁 ${envInfo.localAvatarFile}` : '🌐 BOT_AVATAR_URL'))
+          : '✨ Mặc định';
+
         profileDetails.innerHTML = `
           <div class="profile-item" style="align-items: center;">
             <span>Ảnh đại diện:</span>
             <div style="display: flex; align-items: center; gap: 8px;">
               <img src="${envInfo.avatarUrl || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80'}" alt="Bot Avatar" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid #00D2FF; box-shadow: 0 0 10px rgba(0, 210, 255, 0.4);">
               <span class="val" style="color: ${envInfo.hasCustomAvatar ? '#34d399' : '#f59e0b'}; font-size: 0.82rem;">
-                ${envInfo.hasCustomAvatar ? (envInfo.localAvatarFile ? `📁 ${envInfo.localAvatarFile}` : '🌐 BOT_AVATAR_URL') : '✨ Mặc định'}
+                ${avatarLabel}
               </span>
             </div>
           </div>
@@ -304,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Helper to copy template
-window.copyEnvTemplate = function() {
+window.copyEnvTemplate = function () {
   const text = `ZALO_BOT_TOKEN=token_bot_cua_ban\nGEMINI_API_KEY=khoa_api_gemini_cua_ban`;
   navigator.clipboard.writeText(text).then(() => {
     alert('Đã copy mẫu biến môi trường vào bộ nhớ tạm!');

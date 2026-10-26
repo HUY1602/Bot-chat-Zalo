@@ -137,45 +137,84 @@ function isBotPhotoRequest(text) {
   return false;
 }
 
+// Các đuôi file ảnh được hỗ trợ
+const SUPPORTED_IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+
 /**
- * Tìm file ảnh đại diện cục bộ trong thư mục public/ nếu có
- * @returns {string|null} - Tên file ảnh (ví dụ 'avatar.jpg') hoặc null
+ * Quét và lấy tất cả các file ảnh trong folder public/avatar/ (hoặc public/ nếu có)
+ * @returns {string[]} Danh sách relative path ví dụ: ['avatar/avatar_01.jpg', 'avatar/avatar_02.png']
  */
-function getLocalAvatarFilename() {
+function getLocalAvatarFiles() {
   const publicDir = path.join(__dirname, '../public');
+  const avatarDir = path.join(publicDir, 'avatar');
+  const results = [];
+
+  // 1. Quét thư mục public/avatar/
   try {
-    if (!fs.existsSync(publicDir)) return null;
-    for (const filename of LOCAL_AVATAR_FILES) {
-      const fullPath = path.join(publicDir, filename);
-      if (fs.existsSync(fullPath)) {
-        return filename;
+    if (fs.existsSync(avatarDir)) {
+      const items = fs.readdirSync(avatarDir);
+      for (const item of items) {
+        if (item.startsWith('.')) continue;
+        const ext = path.extname(item).toLowerCase();
+        if (SUPPORTED_IMAGE_EXTS.includes(ext)) {
+          results.push(`avatar/${item}`);
+        }
       }
     }
   } catch (err) {
-    console.warn('Lỗi khi kiểm tra file avatar cục bộ:', err.message);
+    console.warn('Lỗi khi quét thư mục public/avatar/:', err.message);
   }
-  return null;
+
+  // 2. Nếu thư mục avatar/ không có ảnh, quét fallback ở thư mục gốc public/
+  if (results.length === 0) {
+    try {
+      if (fs.existsSync(publicDir)) {
+        for (const filename of LOCAL_AVATAR_FILES) {
+          const fullPath = path.join(publicDir, filename);
+          if (fs.existsSync(fullPath)) {
+            results.push(filename);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Lỗi khi quét thư mục public/:', err.message);
+    }
+  }
+
+  return results;
 }
 
 /**
- * Lấy URL ảnh đại diện của Bot
+ * Lấy ngẫu nhiên 1 file ảnh từ folder avatar
+ * @returns {string|null} Tên relative path file ảnh (ví dụ 'avatar/avatar_01.jpg') hoặc null
+ */
+function getRandomLocalAvatarFile() {
+  const files = getLocalAvatarFiles();
+  if (files.length === 0) return null;
+  const randomIndex = Math.floor(Math.random() * files.length);
+  return files[randomIndex];
+}
+
+/**
+ * Giữ hàm cũ tương thích ngược
+ */
+function getLocalAvatarFilename() {
+  return getRandomLocalAvatarFile();
+}
+
+/**
+ * Lấy URL ảnh đại diện của Bot (Mỗi lần gọi sẽ chọn RANDOM 1 tấm trong folder avatar)
  * Ưu tiên:
- * 1. Biến môi trường BOT_AVATAR_URL (nếu được cấu hình)
- * 2. File trong thư mục public/ (ghép với host hiện tại hoặc domain Vercel)
+ * 1. File trong thư mục public/avatar/ (random 1 tấm)
+ * 2. Biến môi trường BOT_AVATAR_URL (hỗ trợ nhiều link cách nhau bằng dấu phẩy)
  * 3. Fallback ảnh mặc định
  * 
  * @param {object} [req] - Optional request object từ webhook
- * @returns {string} - Public HTTPS URL của ảnh đại diện
+ * @returns {string} - Public HTTPS URL của ảnh đại diện được chọn ngẫu nhiên
  */
 function getBotAvatarUrl(req = null) {
-  // 1. Kiểm tra biến môi trường BOT_AVATAR_URL
-  const envUrl = process.env.BOT_AVATAR_URL;
-  if (envUrl && typeof envUrl === 'string' && envUrl.trim().startsWith('http')) {
-    return envUrl.trim();
-  }
-
-  // 2. Kiểm tra file cục bộ trong public/
-  const localFile = getLocalAvatarFilename();
+  // 1. Quét và chọn ngẫu nhiên 1 ảnh trong folder public/avatar/
+  const localFile = getRandomLocalAvatarFile();
   if (localFile) {
     // Xác định base domain
     let host = null;
@@ -201,6 +240,15 @@ function getBotAvatarUrl(req = null) {
     return `${protocol}://${host}/${localFile}`;
   }
 
+  // 2. Kiểm tra biến môi trường BOT_AVATAR_URL (hỗ trợ nhiều URL cách nhau bằng dấu phẩy)
+  const envUrl = process.env.BOT_AVATAR_URL;
+  if (envUrl && typeof envUrl === 'string') {
+    const urls = envUrl.split(',').map(u => u.trim()).filter(u => u.startsWith('http'));
+    if (urls.length > 0) {
+      return urls[Math.floor(Math.random() * urls.length)];
+    }
+  }
+
   // 3. Fallback mặc định
   return DEFAULT_FALLBACK_AVATAR;
 }
@@ -223,6 +271,8 @@ function getAvatarCaption(senderName = 'anh/chị') {
 module.exports = {
   isBotPhotoRequest,
   getBotAvatarUrl,
+  getLocalAvatarFiles,
+  getRandomLocalAvatarFile,
   getLocalAvatarFilename,
   getAvatarCaption,
   DEFAULT_FALLBACK_AVATAR

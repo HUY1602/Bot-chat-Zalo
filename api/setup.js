@@ -13,8 +13,9 @@ module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     const memStatus = memoryService.getMemoryStatus();
     const avatarUrl = avatarService.getBotAvatarUrl(req);
-    const localFile = avatarService.getLocalAvatarFilename();
-    const hasCustomAvatar = Boolean(process.env.BOT_AVATAR_URL || localFile);
+    const localFiles = avatarService.getLocalAvatarFiles();
+    const localFile = localFiles.length > 0 ? localFiles[0] : null;
+    const hasCustomAvatar = Boolean(process.env.BOT_AVATAR_URL || localFiles.length > 0);
 
     return res.status(200).json({
       ok: true,
@@ -27,6 +28,8 @@ module.exports = async function handler(req, res) {
         geminiModel: process.env.GEMINI_MODEL || geminiService.DEFAULT_MODEL,
         avatarUrl,
         localAvatarFile: localFile,
+        avatarCount: localFiles.length,
+        avatarList: localFiles,
         hasCustomAvatar
       }
     });
