@@ -27,11 +27,23 @@ function cleanupCache() {
 function cleanMention(rawText) {
   if (!rawText) return '';
   let cleaned = rawText.trim();
-  // Remove bot's display name or account name
+
+  // 1. Remove Zalo encoded mention tags like [@oa_id] or [@user_id]
+  cleaned = cleaned.replace(/\[@[^\]]+\]\s*/g, '');
+
+  // 2. Remove known bot names / aliases (with or without leading @)
+  cleaned = cleaned.replace(/^@?Bot\s*bi[eể]n\s*n[eè]\s*/i, '');
+  cleaned = cleaned.replace(/^@?Bọt\s*biển\s*(cute)?\s*/i, '');
   cleaned = cleaned.replace(/^@?Bot\s+Vạn\s+Năng\s*/i, '');
   cleaned = cleaned.replace(/^@?bot\.UOOvNGDv\s*/i, '');
-  // Remove leading @tag if present
+
+  // 3. Remove any leading @mention tag (e.g. "@Bot bien ne bạn là ai" -> "bạn là ai")
+  cleaned = cleaned.replace(/^@[^:\n,?!]+?(\s+(?=[a-z\p{L}0-9/?!])|$)/iu, '');
   cleaned = cleaned.replace(/^@\S+\s*/i, '');
+
+  // 4. Strip leading punctuation or whitespace left after mention (e.g. ": ", ", ", "- ")
+  cleaned = cleaned.replace(/^[:,\-\s]+/, '');
+
   return cleaned.trim();
 }
 
@@ -80,7 +92,7 @@ module.exports = async function handler(req, res) {
   const chat = message.chat || {};
   const chatId = chat.id || event.sender?.id || payload.chat_id;
   const chatType = chat.type || chat.chat_type || 'group';
-  const senderName = message.from?.display_name || event.sender?.name || 'Bạn';
+  const senderName = message.from?.display_name || event.sender?.name || 'anh/chị';
 
   if (!chatId) {
     console.warn('Không tìm thấy chat_id trong payload!');
