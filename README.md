@@ -69,7 +69,7 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 
 ---
 
-### Bước 3: Kích Hoạt Webhook Lên Zalo (Chỉ 1 Click)
+### Bước 3: Kích Hoạt Webhook Lên Zalo
 
 1. Mở đường link Vercel của bạn trên trình duyệt (ví dụ: `https://bot-chat-zalo-huy.vercel.app`).
 2. Giao diện Dashboard quản trị hiện đại sẽ xuất hiện:
@@ -81,7 +81,7 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 
 ---
 
-### Bước 4: Đưa Bot Vào Nhóm Zalo & Thưởng Thức
+### Bước 4: Đưa Bot Vào Nhóm Zalo
 
 1. Mở ứng dụng quản lý Zalo Bot Creator hoặc trang tạo Bot của bạn.
 2. Lấy **Liên kết mời bot (Invite Link)** và gửi vào nhóm Zalo bạn muốn bot tham gia.
@@ -94,7 +94,7 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 
 ---
 
-## 💻 Kiểm Tra & Chạy Thử Ở Local (Không Bắt Buộc)
+## 💻 Kiểm Tra & Chạy Thử Ở Local
 
 Nếu bạn muốn kiểm tra cấu hình hoặc chạy thử nghiệm tại máy cá nhân:
 
