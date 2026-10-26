@@ -7,10 +7,15 @@
 const botService = require('./bot-service');
 const geminiService = require('./gemini-service');
 const memoryService = require('./memory-service');
+const avatarService = require('./avatar-service');
 
 module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     const memStatus = memoryService.getMemoryStatus();
+    const avatarUrl = avatarService.getBotAvatarUrl(req);
+    const localFile = avatarService.getLocalAvatarFilename();
+    const hasCustomAvatar = Boolean(process.env.BOT_AVATAR_URL || localFile);
+
     return res.status(200).json({
       ok: true,
       env: {
@@ -19,7 +24,10 @@ module.exports = async function handler(req, res) {
         hasWebhookSecret: Boolean(process.env.WEBHOOK_SECRET),
         hasUpstashRedis: memStatus.isUpstash,
         memoryProvider: memStatus.provider,
-        geminiModel: process.env.GEMINI_MODEL || geminiService.DEFAULT_MODEL
+        geminiModel: process.env.GEMINI_MODEL || geminiService.DEFAULT_MODEL,
+        avatarUrl,
+        localAvatarFile: localFile,
+        hasCustomAvatar
       }
     });
   }

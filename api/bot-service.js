@@ -159,10 +159,64 @@ async function sendMessage(chatId, text, replyToMsgId = null, token = process.en
   return results;
 }
 
+/**
+ * Send photo to a user or group on Zalo
+ * @param {string|number} chatId 
+ * @param {string} photoUrl - Public HTTPS image URL
+ * @param {string} caption - Optional text caption
+ * @param {string|number} replyToMsgId 
+ * @param {string} token 
+ */
+async function sendPhoto(chatId, photoUrl, caption = '', replyToMsgId = null, token = process.env.ZALO_BOT_TOKEN) {
+  if (!token) throw new Error('ZALO_BOT_TOKEN is not defined');
+  if (!chatId) throw new Error('chat_id is required');
+  if (!photoUrl) throw new Error('photo URL is required');
+
+  const endpoint = `${ZALO_API_BASE}${token}/sendPhoto`;
+  const body = {
+    chat_id: String(chatId),
+    photo: String(photoUrl)
+  };
+
+  if (caption) {
+    body.caption = String(caption);
+  }
+
+  if (replyToMsgId) {
+    body.reply_to_message_id = String(replyToMsgId);
+  }
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+
+    // If reply_to_message_id failed, retry once without it
+    if (!data.ok && body.reply_to_message_id) {
+      delete body.reply_to_message_id;
+      const retryRes = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      return await retryRes.json();
+    }
+
+    return data;
+  } catch (err) {
+    console.error('Error sending photo:', err);
+    throw err;
+  }
+}
+
 module.exports = {
   getBotInfo,
   setWebhook,
   testWebhook,
   sendMessage,
+  sendPhoto,
   splitMessage
 };

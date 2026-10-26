@@ -4,6 +4,7 @@
  */
 
 const geminiService = require('./gemini-service');
+const avatarService = require('./avatar-service');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -14,6 +15,18 @@ module.exports = async function handler(req, res) {
 
   if (!message) {
     return res.status(400).json({ ok: false, error: 'Vui lòng cung cấp nội dung câu hỏi' });
+  }
+
+  // Nếu người dùng test câu hỏi xem mặt / ảnh bot
+  if (avatarService.isBotPhotoRequest(message)) {
+    const avatarUrl = avatarService.getBotAvatarUrl(req);
+    const caption = avatarService.getAvatarCaption('Bạn');
+    return res.status(200).json({
+      ok: true,
+      answer: caption,
+      photoUrl: avatarUrl,
+      durationMs: 40
+    });
   }
 
   try {

@@ -5,7 +5,7 @@
  * Fallback: In-Memory RAM cache (Active during warm serverless container lifecycle)
  */
 
-const MAX_HISTORY_MESSAGES = parseInt(process.env.MAX_HISTORY_MESSAGES, 10) || 50; // Keep up to 50 messages (25 user + 25 model turns)
+const MAX_HISTORY_MESSAGES = parseInt(process.env.MAX_HISTORY_MESSAGES, 10) || 200; // Keep up to 200 messages (100 user + 100 model turns)
 const DEFAULT_TTL_SECONDS = parseInt(process.env.MEMORY_TTL_SECONDS, 10) || (7 * 24 * 60 * 60); // 7 days (1 week) memory expiration
 
 // In-Memory fallback store
@@ -193,7 +193,7 @@ async function getAllChats() {
           let messages = [];
           try {
             messages = typeof rawHistory === 'string' ? JSON.parse(rawHistory) : (rawHistory || []);
-          } catch (e) {}
+          } catch (e) { }
 
           result.push({
             chatId,

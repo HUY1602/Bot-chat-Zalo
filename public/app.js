@@ -82,6 +82,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const botId = bot.id || bot.bot_id || 'Chưa định danh';
 
         profileDetails.innerHTML = `
+          <div class="profile-item" style="align-items: center;">
+            <span>Ảnh đại diện:</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <img src="${envInfo.avatarUrl || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80'}" alt="Bot Avatar" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid #00D2FF; box-shadow: 0 0 10px rgba(0, 210, 255, 0.4);">
+              <span class="val" style="color: ${envInfo.hasCustomAvatar ? '#34d399' : '#f59e0b'}; font-size: 0.82rem;">
+                ${envInfo.hasCustomAvatar ? (envInfo.localAvatarFile ? `📁 ${envInfo.localAvatarFile}` : '🌐 BOT_AVATAR_URL') : '✨ Mặc định'}
+              </span>
+            </div>
+          </div>
           <div class="profile-item">
             <span>Tên Bot:</span>
             <span class="val">🤖 ${botName}</span>
@@ -217,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
       removeTypingIndicator(typingId);
 
       if (data.ok) {
-        appendMessage('bot', `Zalo Gemini Bot (${data.durationMs}ms)`, data.answer);
+        appendMessage('bot', `Bọt biển cute (${data.durationMs}ms)`, data.answer, data.photoUrl);
       } else {
         appendMessage('bot', 'Hệ Thống Báo Lỗi', `⚠️ ${data.error || 'Không thể tạo phản hồi từ Gemini'}`);
       }
@@ -230,20 +239,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  function appendMessage(role, author, text) {
+  function appendMessage(role, author, text, photoUrl = null) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `chat-message ${role}-msg`;
 
-    const avatar = role === 'user' ? '👤' : '🤖';
+    const avatar = role === 'user' ? '👤' : '🫧';
 
     // Simple markdown renderer for bolding **text**
     const formattedText = escapeHtml(text).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    let photoHtml = '';
+    if (photoUrl) {
+      photoHtml = `
+        <div class="msg-photo" style="margin-top: 10px;">
+          <img src="${escapeHtml(photoUrl)}" alt="Ảnh đại diện của Bot" style="max-width: 240px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 4px 16px rgba(0,0,0,0.4); display: block;">
+        </div>
+      `;
+    }
 
     msgDiv.innerHTML = `
       <div class="msg-avatar">${avatar}</div>
       <div class="msg-bubble">
         <div class="msg-author">${escapeHtml(author)}</div>
-        <div class="msg-text">${formattedText}</div>
+        <div class="msg-text">${formattedText}${photoHtml}</div>
       </div>
     `;
 

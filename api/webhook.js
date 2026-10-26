@@ -6,6 +6,7 @@
 const botService = require('./bot-service');
 const geminiService = require('./gemini-service');
 const memoryService = require('./memory-service');
+const avatarService = require('./avatar-service');
 
 // Cache to prevent duplicate processing from webhook retries
 const processedMessageIds = new Map();
@@ -139,6 +140,37 @@ module.exports = async function handler(req, res) {
       const pingText = `🏓 Pong! Em vẫn ở đây nè ⚡ Hệ thống chạy mượt lắm ạ 🫧\n💾 Bộ nhớ: ${memStatus.provider}`;
       await botService.sendMessage(chatId, pingText, msgId);
       return res.status(200).json({ ok: true });
+    }
+
+    // 2.5 Yêu cầu xem mặt / hình / ảnh / avatar của Bot
+    if (avatarService.isBotPhotoRequest(userQuery)) {
+      const avatarUrl = avatarService.getBotAvatarUrl(req);
+      const caption = avatarService.getAvatarCaption(senderName);
+      console.log(`[Avatar Request] Gửi ảnh đại diện cho ${senderName} (${chatId}): ${avatarUrl}`);
+
+      try {
+        const sendResult = await botService.sendPhoto(chatId, avatarUrl, caption, msgId);
+        console.log('Kết quả sendPhoto:', JSON.stringify(sendResult));
+
+        // Nếu Zalo Bot API trả về ok=false, fallback gửi bằng sendMessage
+        if (sendResult && sendResult.ok === false) {
+          console.warn('sendPhoto trả về ok=false, fallback sang sendMessage:', sendResult.description || sendResult.error);
+          await botService.sendMessage(chatId, `${caption}\n\n🔗 ${avatarUrl}`, msgId);
+        }
+      } catch (photoErr) {
+        console.error('Lỗi khi gọi sendPhoto:', photoErr.message);
+        // Fallback gửi qua sendMessage
+        await botService.sendMessage(chatId, `${caption}\n\n🔗 ${avatarUrl}`, msgId);
+      }
+
+      // Lưu tương tác vào bộ nhớ hội thoại để AI hiểu ngữ cảnh các câu sau
+      await memoryService.addTurn(
+        chatId,
+        `[${senderName}]: ${userQuery}`,
+        `[Em đã gửi ảnh đại diện của mình cho ${senderName} xem kèm lời nhắn: "${caption}"]`
+      );
+
+      return res.status(200).json({ ok: true, action: 'sendPhoto' });
     }
 
     // 3. Nếu người dùng chỉ tag bot mà không hỏi gì
