@@ -9,6 +9,7 @@ const memoryService = require('./memory-service');
 const avatarService = require('./avatar-service');
 const imageService = require('./image-service');
 const searchService = require('./search-service');
+const reminderService = require('./reminder-service');
 
 // Cache to prevent duplicate processing from webhook retries
 const processedMessageIds = new Map();
@@ -65,6 +66,11 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
+  // Opportunistic trigger: Quét kiểm tra xem có nhắc việc nào đã đến hạn không
+  reminderService.checkAndTriggerReminders().catch(err => {
+    console.warn('[Webhook Opportunistic Trigger Error]:', err.message);
+  });
+
   // Verify secret token if configured
   const secretToken = process.env.WEBHOOK_SECRET;
   if (secretToken && secretToken.trim() !== '') {
@@ -100,6 +106,7 @@ module.exports = async function handler(req, res) {
   // Extract sender information accurately from Zalo message.from
   const fromUser = message.from || event.sender || payload.sender || {};
   const senderName = fromUser.display_name || fromUser.name || fromUser.first_name || 'Thành viên';
+  const userId = fromUser.id || fromUser.user_id || event.sender?.id || payload.sender?.id;
 
   if (!chatId) {
     console.warn('Không tìm thấy chat_id trong payload!');
@@ -131,7 +138,7 @@ module.exports = async function handler(req, res) {
 
     // 1. Built-in command: /start hoặc /help
     if (userQuery === '/start' || userQuery === '/help' || userQuery === '!help') {
-      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh/chị cần gì cứ hỏi em nha!\n\n📌 Các tính năng của em:\n• Hỏi đáp thông minh: Gõ @tên_bot kèm câu hỏi hoặc Reply tin nhắn của em\n• Vẽ tranh AI: Gõ "vẽ + mô tả" (ví dụ: vẽ chú mèo phi hành gia) hoặc "/draw ..."\n• Xem ảnh của em: Gõ "cho xem ảnh bot", "xem mặt bot"\n• /ping: Kiểm tra bot còn hoạt động không\n• /reset: Làm mới bộ nhớ trò chuyện\n• /help: Xem lại hướng dẫn này`;
+      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh/chị cần gì cứ hỏi em nha!\n\n📌 Các tính năng của em:\n• Hỏi đáp thông minh: Gõ @tên_bot kèm câu hỏi hoặc Reply tin nhắn của em\n• ⏰ Hẹn giờ & Nhắc việc: "nhắc anh 10 phút nữa uống nước", "nhắc em mai 8h sáng nộp báo cáo", /reminders, /huynhac\n• 🎨 Vẽ tranh AI: Gõ "vẽ + mô tả" (ví dụ: vẽ chú mèo phi hành gia) hoặc "/draw ..."\n• 📸 Xem ảnh của em: Gõ "cho xem ảnh bot", "xem mặt bot"\n• /ping: Kiểm tra bot còn hoạt động không\n• /reset: Làm mới bộ nhớ trò chuyện\n• /help: Xem lại hướng dẫn này`;
       await botService.sendMessage(chatId, helpText, msgId);
       return res.status(200).json({ ok: true });
     }
@@ -144,7 +151,84 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // 2.5 Fast-path: Lệnh trực tiếp /draw hoặc /ve (không cần qua AI phân tích ý định)
+    // 2.3 Xem danh sách nhắc việc: /reminders, /dsnhac hoặc "danh sách nhắc việc"
+    if (reminderService.isListRemindersRequest(userQuery)) {
+      const reminders = await reminderService.listReminders(chatId);
+      if (reminders.length === 0) {
+        const noRemindText = `Dạ hiện tại nhóm mình chưa có lịch hẹn hay nhắc việc nào đang chờ nè ${senderName} ơi! ⏰✨\n\nAnh/chị có thể nhắn ví dụ: "nhắc anh 15 phút nữa nộp báo cáo" để em ghi nhớ nha! 🥰`;
+        await botService.sendMessage(chatId, noRemindText, msgId);
+      } else {
+        const listItems = reminders.map((r, i) => {
+          const diffMs = r.scheduledTime - Date.now();
+          const relStr = reminderService.formatRelativeTime(diffMs);
+          return `${i + 1}. 📌 **${r.task}**\n   🕒 ${r.timeFormatted} (${relStr})\n   👤 Nhắc: ${r.targetName}\n   🔑 ID: ${r.id}`;
+        }).join('\n\n');
+
+        const listText = `⏰ DANH SÁCH NHẮC VIỆC ĐANG CHỜ CỦA NHÓM NÈ:\n\n${listItems}\n\n💡 Để hủy nhắc việc, anh/chị gõ: /huynhac [ID] hoặc /huynhac all (hủy tất cả)`;
+        await botService.sendMessage(chatId, listText, msgId);
+      }
+      return res.status(200).json({ ok: true, action: 'listReminders' });
+    }
+
+    // 2.4 Hủy nhắc việc: /huynhac, /cancelremind hoặc "hủy nhắc việc"
+    if (reminderService.isCancelReminderRequest(userQuery)) {
+      const idMatch = userQuery.match(/\b(remind_[a-z0-9_]+)\b/i);
+      const isAll = /\ball\b|tất\s*cả|toàn\s*bộ/i.test(userQuery);
+      const targetId = idMatch ? idMatch[1] : (isAll ? 'all' : 'all');
+
+      const cancelRes = await reminderService.cancelReminder(chatId, targetId);
+      const cancelText = cancelRes.count > 0
+        ? `Dạ Bọt biển đã hủy thành công ${cancelRes.count} lịch nhắc cho nhóm mình rồi nè ${senderName} ơi! 🫧`
+        : `Dạ em không tìm thấy lịch nhắc nào cần hủy trong nhóm mình nè ${senderName} ơi! 🥰`;
+
+      await botService.sendMessage(chatId, cancelText, msgId);
+      return res.status(200).json({ ok: true, action: 'cancelReminder' });
+    }
+
+    // 2.5 Hẹn giờ & Nhắc việc thông minh (/remind hoặc ngôn ngữ tự nhiên)
+    if (reminderService.isReminderRequest(userQuery)) {
+      console.log(`[Reminder Request] Từ ${senderName}: "${userQuery}"`);
+      const parseResult = await reminderService.parseReminder(userQuery, senderName);
+
+      if (parseResult.ok && parseResult.scheduledTime) {
+        const reminder = await reminderService.createReminder({
+          chatId,
+          senderName,
+          userId,
+          targetName: parseResult.targetName,
+          task: parseResult.task,
+          scheduledTime: parseResult.scheduledTime,
+          timeFormatted: parseResult.timeFormatted
+        });
+
+        const confirmMsg = reminderService.buildConfirmationMessage(reminder);
+        await botService.sendMessage(chatId, confirmMsg, msgId);
+
+        // Lưu vào bộ nhớ ngữ cảnh hội thoại
+        await memoryService.addTurn(
+          chatId,
+          `[${senderName}]: ${userQuery}`,
+          `[Em đã đặt lịch nhắc "${reminder.task}" vào lúc ${reminder.timeFormatted} cho ${reminder.targetName}]`
+        );
+
+        // Nếu hẹn trong thời gian rất ngắn (dưới 25 giây), chạy hẹn giờ trong tiến trình hiện tại nếu còn sống
+        if (parseResult.delayMs <= 25000) {
+          setTimeout(async () => {
+            try {
+              await reminderService.checkAndTriggerReminders();
+            } catch (e) {}
+          }, parseResult.delayMs);
+        }
+
+        return res.status(200).json({ ok: true, action: 'createReminder', reminderId: reminder.id });
+      } else {
+        const guideText = `Ui, ${senderName} ơi, em chưa hiểu rõ thời gian anh/chị muốn hẹn nè 🥺\n\nAnh/chị có thể nhắn rõ hơn, ví dụ:\n• "nhắc anh 10 phút nữa uống nước"\n• "nhắc em mai 8h sáng nộp báo cáo"\n• "nhắc nhóm 15h30 chiều nay họp"\n• Hoặc dùng lệnh: /remind 15m đi ăn cơm`;
+        await botService.sendMessage(chatId, guideText, msgId);
+        return res.status(200).json({ ok: false, error: 'Could not parse reminder time' });
+      }
+    }
+
+    // 2.6 Fast-path: Lệnh trực tiếp /draw hoặc /ve (không cần qua AI phân tích ý định)
     if (/^\/(?:draw|image|ve|paint|art|gen)\s+/i.test(userQuery)) {
       console.log(`[Fast-path Draw] ${senderName} yêu cầu vẽ tranh: "${userQuery}"`);
       try {

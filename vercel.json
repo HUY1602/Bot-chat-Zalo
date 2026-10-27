@@ -1,5 +1,11 @@
 {
   "version": 2,
+  "crons": [
+    {
+      "path": "/api/reminder-cron",
+      "schedule": "* * * * *"
+    }
+  ],
   "functions": {
     "api/*.js": {
       "maxDuration": 30,
@@ -7,3 +13,4 @@
     }
   }
 }
+

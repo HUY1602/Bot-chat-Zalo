@@ -130,6 +130,35 @@ body {
   color: var(--text-secondary);
 }
 
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.nav-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.nav-link-btn:hover {
+  background: rgba(0, 104, 255, 0.15);
+  border-color: rgba(0, 104, 255, 0.4);
+  color: #93c5fd;
+  transform: translateY(-1px);
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;

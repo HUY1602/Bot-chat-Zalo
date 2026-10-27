@@ -32,7 +32,13 @@ function shouldSearchWeb(text) {
   if (raw.length < 2) return false;
 
   // 1. KHÔNG tìm kiếm: Lệnh hệ thống
-  if (/^\/(?:draw|image|ve|paint|art|gen|ping|reset|help|clear|forget|start)\b/i.test(raw)) return false;
+  if (/^\/(?:draw|image|ve|paint|art|gen|ping|reset|help|clear|forget|start|remind|hengio|nhac|hen|reminder|reminders|dsnhac|huynhac|xoanhac)\b/i.test(raw)) return false;
+
+  // 1.5 KHÔNG tìm kiếm: Yêu cầu hẹn giờ / nhắc việc
+  const unaccented = removeVietnameseTones(raw);
+  if (/\b(?:nhac|hen gio|dat lich|bao thuc)\s+(?:cho\s+)?(?:anh|chi|em|toi|minh|nhom|tui)?\b/i.test(unaccented)) return false;
+  if (/\b(?:\d+|mot|hai|ba|bon|nam|sau|bay|tam|chin|muoi)\s*(?:phut|giay|tieng|gio|ngay)\s*nua\s+(?:nhac|bao|goi)\b/i.test(unaccented)) return false;
+  if (/\b(?:danh sach|xem|huy|xoa)\s+(?:lich\s+)?(?:nhac|hen gio|nhac viec|lich hen)\b/i.test(unaccented)) return false;
 
   // 2. KHÔNG tìm kiếm: Yêu cầu xem avatar
   if (/\b(?:xem|gửi|cho|đổi|show|khoe|nhìn|ngắm)\b.{0,15}\b(?:ảnh|mặt|hình|avatar|dung nhan)\b/i.test(raw) ||
@@ -40,8 +46,6 @@ function shouldSearchWeb(text) {
 
   // 3. KHÔNG tìm kiếm: Yêu cầu vẽ tranh AI
   if (/^(?:vẽ|tạo\s+ảnh|phác\s+họa|lên\s+hình)\s+/i.test(raw)) return false;
-
-  const unaccented = removeVietnameseTones(raw);
 
   // 4. KHÔNG tìm kiếm: Sáng tạo nội dung (thơ, truyện cười, lời chúc, văn mẫu, viết kịch bản)
   if (/\b(?:viet|lam|che)\s+(?:cho\s+anh\s+|cho\s+em\s+)?(?:bai\s+)?(?:tho|van|kich|rap|nhac|status|stt|caption|loi chuc)\b/i.test(unaccented)) return false;
