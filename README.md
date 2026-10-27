@@ -106,20 +106,27 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 
 ---
 
-### 📸 Cài Đặt Ảnh Đại Diện Bot Từ Google Drive (Không Lưu Trên Máy)
+### 📸 Cài Đặt Ảnh Đại Diện Bot Từ Thư Mục Google Drive (Tự Động Random)
 
-Thay vì lưu file trên máy local, bạn có thể lưu toàn bộ ảnh avatar trên **Google Drive** để bot tự động lấy:
+Bạn **KHÔNG CẦN dán từng link ảnh**! Bạn có thể dán nguyên **link 1 thư mục (Folder) Google Drive**, bot sẽ tự động quét toàn bộ ảnh trong đó và random mỗi lần được hỏi:
 
-1. **Upload ảnh lên Google Drive** cá nhân của bạn.
-2. Bấm chuột phải vào ảnh > **Chia sẻ (Share)** > Chọn **"Bất kỳ ai có đường liên kết đều có thể xem"** (Anyone with the link can view).
-3. **Sao chép đường liên kết** (Link có dạng: `https://drive.google.com/file/d/1A2B3C.../view?usp=sharing`).
+1. **Tạo 1 thư mục trên Google Drive** (ví dụ: `Avatar Bot Zalo`).
+2. **Tải tất cả ảnh bạn muốn vào thư mục đó** (jpg, png, webp, gif...).
+3. **Chia sẻ thư mục công khai:**
+   - Chuột phải vào Thư mục > Chọn **Chia sẻ (Share)**.
+   - Ở mục *Quyền truy cập chung*, đổi sang: **"Bất kỳ ai có đường liên kết đều có thể xem"** (Anyone with the link can view).
+   - Bấm **Sao chép đường liên kết** (Link có dạng: `https://drive.google.com/drive/folders/1a2b3c4d5e...`).
 4. **Cấu hình trên Vercel** (hoặc file `.env`):
-   - Thêm biến `BOT_AVATAR_URL` và dán link vừa copy vào.
-   - Nếu có **nhiều ảnh** để bot đổi ảnh ngẫu nhiên (random không trùng lặp), chỉ cần dán các link cách nhau bằng dấu phẩy:
+   - Thêm biến `BOT_AVATAR_URL` và dán thẳng link thư mục:
      ```env
-     BOT_AVATAR_URL=https://drive.google.com/file/d/ID1/view, https://drive.google.com/file/d/ID2/view, https://drive.google.com/file/d/ID3/view
+     BOT_AVATAR_URL=https://drive.google.com/drive/folders/1a2b3c4d5e...
      ```
-   - ⚡ Bot sẽ tự động chuyển đổi các link Google Drive này thành link ảnh trực tiếp tốc độ cao của Google CDN (`lh3.googleusercontent.com/d/ID`) để gửi thẳng vào Zalo mà không qua trang web trung gian!
+   - *(Hoặc bạn cũng có thể dùng biến riêng: `GOOGLE_DRIVE_FOLDER_URL=https://drive.google.com/drive/folders/...`)*
+5. **Cách Bot Hoạt Động:**
+   - ✨ **Tự động nhận diện:** Bot phát hiện link folder, tự nạp tất cả file ảnh mà **KHÔNG CẦN API Key hay OAuth**.
+   - 🎲 **Random thông minh:** Mỗi khi thành viên hỏi *"cho xem ảnh bot"*, *"xem mặt em"*, *"ảnh khác đi"*, bot sẽ bốc ngẫu nhiên 1 ảnh (đảm bảo không bị trùng 2 lần liên tiếp).
+   - ⚡ **Tốc độ cao:** Ảnh được nạp qua Google Direct CDN (`lh3.googleusercontent.com/d/ID`), gửi ảnh nhị phân trực tiếp đến Zalo.
+   - 🔄 **Thêm ảnh không cần sửa code:** Khi muốn thêm ảnh mới, bạn chỉ cần ném thêm ảnh vào folder Drive trên điện thoại/máy tính, bot sẽ tự động cập nhật!
 
 ---
 

@@ -55,7 +55,7 @@ module.exports = async function handler(req, res) {
     const duration = Date.now() - startTime;
 
     if (action.type === 'SEND_AVATAR') {
-      const avatarUrl = avatarService.getBotAvatarUrl(req);
+      const avatarUrl = await avatarService.getBotAvatarUrl(req);
       const caption = action.text || avatarService.getAvatarCaption('Bạn', action.isOther);
       return res.status(200).json({
         ok: true,
@@ -87,7 +87,7 @@ module.exports = async function handler(req, res) {
     // Fallback: Nếu Gemini lỗi nhưng người dùng hỏi ảnh đại diện theo keyword
     if (avatarService.isBotPhotoRequest(message)) {
       const isOther = avatarService.isOtherPhotoRequest(message);
-      const avatarUrl = avatarService.getBotAvatarUrl(req);
+      const avatarUrl = await avatarService.getBotAvatarUrl(req);
       const caption = avatarService.getAvatarCaption('Bạn', isOther);
       return res.status(200).json({
         ok: true,

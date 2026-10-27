@@ -30,12 +30,8 @@ const DEFAULT_AVATAR_LIST = [
 // Lưu vết ảnh vừa gửi gần nhất để lần sau chọn KHÔNG BỊ TRÙNG LẶP LIÊN TIẾP
 let lastSentAvatar = null;
 
-// Cache lưu danh sách ảnh lấy từ Google Drive Folder (TTL: 1 giờ)
-let folderCache = {
-  urls: [],
-  expiresAt: 0,
-  key: ''
-};
+// Cache lưu danh sách ảnh lấy từ Google Drive Folder (TTL: 1 giờ) theo Folder ID hoặc URL
+const folderCacheMap = new Map();
 
 /**
  * Trích xuất Google Drive File ID từ bất kỳ định dạng link chia sẻ nào
@@ -72,6 +68,11 @@ function extractGoogleDriveFileId(url) {
 
 /**
  * Trích xuất Google Drive Folder ID từ link thư mục
+ * Hỗ trợ các định dạng:
+ * - https://drive.google.com/drive/folders/FOLDER_ID
+ * - https://drive.google.com/drive/u/0/folders/FOLDER_ID
+ * - https://drive.google.com/embeddedfolderview?id=FOLDER_ID
+ * - https://drive.google.com/folderview?id=FOLDER_ID
  * @param {string} url 
  * @returns {string|null}
  */
@@ -83,9 +84,9 @@ function extractGoogleDriveFolderId(url) {
   const matchFolder = trimmed.match(/\/folders\/([a-zA-Z0-9_-]+)/);
   if (matchFolder) return matchFolder[1];
 
-  // Dạng ?id=FOLDER_ID
+  // Dạng embeddedfolderview?id=FOLDER_ID hoặc folderview?id=FOLDER_ID hoặc ?id=FOLDER_ID
   const matchId = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  if (matchId && trimmed.includes('folder')) return matchId[1];
+  if (matchId && (trimmed.includes('folder') || trimmed.includes('embedded'))) return matchId[1];
 
   return null;
 }
@@ -111,7 +112,105 @@ function convertGoogleDriveUrl(url) {
 }
 
 /**
- * Gọi Google Drive API v3 để lấy danh sách tất cả file ảnh trong 1 Folder công khai
+ * Quét danh sách tất cả file ảnh từ Google Drive Folder công khai
+ * KHÔNG CẦN GOOGLE CLOUD API KEY, KHÔNG CẦN OAUTH, KHÔNG CẦN APPS SCRIPT!
+ * Người dùng chỉ cần chia sẻ thư mục Drive với quyền: "Bất kỳ ai có đường liên kết đều có thể xem" (Anyone with the link can view)
+ * 
+ * @param {string} folderIdOrUrl - Folder ID hoặc URL thư mục Google Drive
+ * @param {number} [depth=1] - Hỗ trợ quét thư mục con tối đa 1 cấp nếu thư mục chính chỉ chứa thư mục con
+ * @returns {Promise<string[]>} Danh sách link CDN ảnh trực tiếp (https://lh3.googleusercontent.com/d/{FILE_ID})
+ */
+async function fetchPublicGoogleDriveFolderFiles(folderIdOrUrl, depth = 1) {
+  if (!folderIdOrUrl || typeof folderIdOrUrl !== 'string') return [];
+  const cleanId = extractGoogleDriveFolderId(folderIdOrUrl) || (
+    folderIdOrUrl.length >= 25 && !folderIdOrUrl.includes('/') && !folderIdOrUrl.includes('.')
+      ? folderIdOrUrl.trim()
+      : null
+  );
+  if (!cleanId) return [];
+
+  const now = Date.now();
+  const cached = folderCacheMap.get(cleanId);
+  if (cached && cached.expiresAt > now && cached.urls.length > 0) {
+    return cached.urls;
+  }
+
+  const endpoint = `https://drive.google.com/embeddedfolderview?id=${encodeURIComponent(cleanId)}`;
+  try {
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'vi,en-US;q=0.9,en;q=0.8'
+      }
+    });
+
+    if (!res.ok) {
+      console.warn(`[Google Drive Folder HTTP ${res.status}] Không thể truy cập thư mục ${cleanId}. Đảm bảo thư mục đã bật "Bất kỳ ai có đường liên kết đều có thể xem".`);
+      return [];
+    }
+
+    const html = await res.text();
+    const parts = html.split('<div class="flip-entry"');
+    const imageUrls = [];
+    const subfolderIds = [];
+
+    const nonImageExts = ['.mov', '.mp4', '.avi', '.mkv', '.webm', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip', '.rar', '.7z', '.mp3', '.wav', '.flac'];
+
+    for (let i = 1; i < parts.length; i++) {
+      const chunk = parts[i];
+      const idMatch = chunk.match(/id="entry-([a-zA-Z0-9_-]+)"/);
+      if (!idMatch) continue;
+      const fileId = idMatch[1];
+
+      const isSubfolder = chunk.includes('drive.google.com/drive/folders/') || chunk.includes('aria-label="Folder"');
+      const titleMatch = chunk.match(/class="flip-entry-title">([^<]+)<\/div>/);
+      const title = titleMatch ? titleMatch[1].trim() : '';
+
+      if (isSubfolder) {
+        subfolderIds.push(fileId);
+        continue;
+      }
+
+      // Kiểm tra xem có phải file ảnh không
+      const lowerTitle = title.toLowerCase();
+      const hasImageExt = SUPPORTED_IMAGE_EXTS.some(ext => lowerTitle.endsWith(ext));
+      const hasNonImageExt = nonImageExts.some(ext => lowerTitle.endsWith(ext));
+
+      if (hasImageExt || (!hasNonImageExt && lowerTitle.length > 0)) {
+        imageUrls.push(`https://lh3.googleusercontent.com/d/${fileId}`);
+      }
+    }
+
+    // Nếu trong thư mục chính không có ảnh trực tiếp nhưng có thư mục con, quét tiếp thư mục con
+    if (imageUrls.length === 0 && subfolderIds.length > 0 && depth > 0) {
+      const limitedSubfolders = subfolderIds.slice(0, 3);
+      for (const subId of limitedSubfolders) {
+        const subImages = await fetchPublicGoogleDriveFolderFiles(subId, depth - 1);
+        imageUrls.push(...subImages);
+      }
+    }
+
+    if (imageUrls.length > 0) {
+      folderCacheMap.set(cleanId, {
+        urls: imageUrls,
+        expiresAt: now + (60 * 60 * 1000) // Cache 1 giờ
+      });
+      console.log(`[Google Drive Folder] Tự động nạp thành công ${imageUrls.length} ảnh từ thư mục Drive: ${cleanId}`);
+    } else {
+      console.warn(`[Google Drive Folder] Thư mục ${cleanId} không tìm thấy ảnh hợp lệ hoặc thư mục đang rỗng.`);
+    }
+
+    return imageUrls;
+  } catch (err) {
+    console.error(`[Google Drive Folder] Lỗi khi nạp ảnh từ thư mục ${cleanId}:`, err.message);
+    return [];
+  }
+}
+
+/**
+ * Gọi Google Drive API v3 để lấy danh sách tất cả file ảnh trong 1 Folder (dùng khi có Google Cloud API Key)
  * @param {string} folderId 
  * @param {string} apiKey 
  * @returns {Promise<string[]>}
@@ -120,8 +219,9 @@ async function fetchGoogleDriveFolderFiles(folderId, apiKey) {
   if (!folderId || !apiKey) return [];
 
   const now = Date.now();
-  if (folderCache.key === folderId && folderCache.expiresAt > now && folderCache.urls.length > 0) {
-    return folderCache.urls;
+  const cached = folderCacheMap.get(folderId);
+  if (cached && cached.expiresAt > now && cached.urls.length > 0) {
+    return cached.urls;
   }
 
   try {
@@ -147,17 +247,16 @@ async function fetchGoogleDriveFolderFiles(folderId, apiKey) {
       .map(f => `https://lh3.googleusercontent.com/d/${f.id}`);
 
     if (imageUrls.length > 0) {
-      folderCache = {
-        key: folderId,
+      folderCacheMap.set(folderId, {
         urls: imageUrls,
         expiresAt: now + (60 * 60 * 1000) // Cache 1 giờ
-      };
-      console.log(`[Google Drive Folder] Đã nạp thành công ${imageUrls.length} ảnh từ thư mục Drive ${folderId}`);
+      });
+      console.log(`[Google Drive API] Đã nạp thành công ${imageUrls.length} ảnh từ thư mục Drive ${folderId}`);
     }
 
     return imageUrls;
   } catch (err) {
-    console.error('Lỗi khi fetch danh sách ảnh từ Google Drive Folder:', err.message);
+    console.error('Lỗi khi fetch danh sách ảnh từ Google Drive Folder API:', err.message);
     return [];
   }
 }
@@ -171,8 +270,9 @@ async function fetchGoogleDriveWebAppFiles(webAppUrl) {
   if (!webAppUrl || !webAppUrl.startsWith('http')) return [];
 
   const now = Date.now();
-  if (folderCache.key === webAppUrl && folderCache.expiresAt > now && folderCache.urls.length > 0) {
-    return folderCache.urls;
+  const cached = folderCacheMap.get(webAppUrl);
+  if (cached && cached.expiresAt > now && cached.urls.length > 0) {
+    return cached.urls;
   }
 
   try {
@@ -202,11 +302,10 @@ async function fetchGoogleDriveWebAppFiles(webAppUrl) {
       .filter(Boolean);
 
     if (urls.length > 0) {
-      folderCache = {
-        key: webAppUrl,
+      folderCacheMap.set(webAppUrl, {
         urls,
         expiresAt: now + (60 * 60 * 1000)
-      };
+      });
       console.log(`[Google Apps Script] Đã nạp ${urls.length} ảnh từ Drive Web App`);
     }
 
@@ -218,13 +317,13 @@ async function fetchGoogleDriveWebAppFiles(webAppUrl) {
 }
 
 /**
- * Lấy danh sách các URL ảnh online đã cấu hình (Google Drive, Cloud URLs, v.v.)
+ * Lấy danh sách các URL ảnh online đã cấu hình (Google Drive Folder, Google Drive file, Cloud URLs, v.v.)
  * @returns {Promise<string[]>}
  */
 async function getRemoteAvatarUrls() {
   const resultUrls = [];
 
-  // 1. Kiểm tra Google Apps Script Web App
+  // 1. Kiểm tra Google Apps Script Web App (nếu có cấu hình)
   const webAppUrl = process.env.GOOGLE_DRIVE_FOLDER_WEBAPP_URL || process.env.GOOGLE_DRIVE_WEBAPP_URL;
   if (webAppUrl) {
     const webAppFiles = await fetchGoogleDriveWebAppFiles(webAppUrl);
@@ -233,38 +332,50 @@ async function getRemoteAvatarUrls() {
     }
   }
 
-  // 2. Kiểm tra Google Drive Folder ID + API Key
+  // 2. Kiểm tra Google Drive Folder ID / URL từ biến riêng GOOGLE_DRIVE_FOLDER_URL hoặc GOOGLE_DRIVE_FOLDER_ID
   const folderConfig = process.env.GOOGLE_DRIVE_FOLDER_ID || process.env.GOOGLE_DRIVE_FOLDER_URL;
-  const driveApiKey = process.env.GOOGLE_DRIVE_API_KEY || process.env.GOOGLE_API_KEY;
-
   if (folderConfig) {
-    const folderId = extractGoogleDriveFolderId(folderConfig) || folderConfig;
-    if (folderId && driveApiKey) {
-      const folderFiles = await fetchGoogleDriveFolderFiles(folderId, driveApiKey);
+    const folderId = extractGoogleDriveFolderId(folderConfig) || (
+      folderConfig.length >= 25 && !folderConfig.includes('/') ? folderConfig.trim() : null
+    );
+    if (folderId) {
+      // Ưu tiên quét public folder tự động (không cần API key)
+      let folderFiles = await fetchPublicGoogleDriveFolderFiles(folderId);
+      // Fallback API v3 nếu có cung cấp API key
+      const driveApiKey = process.env.GOOGLE_DRIVE_API_KEY || process.env.GOOGLE_API_KEY;
+      if (folderFiles.length === 0 && driveApiKey) {
+        folderFiles = await fetchGoogleDriveFolderFiles(folderId, driveApiKey);
+      }
       if (folderFiles.length > 0) {
         resultUrls.push(...folderFiles);
       }
     }
   }
 
-  // 3. Kiểm tra biến môi trường BOT_AVATAR_URL (danh sách URL cách nhau bởi dấu phẩy hoặc xuống dòng)
+  // 3. Kiểm tra biến môi trường BOT_AVATAR_URL (có thể là link 1 folder, nhiều folder, hoặc danh sách file)
   const envUrl = process.env.BOT_AVATAR_URL;
   if (envUrl && typeof envUrl === 'string' && envUrl.trim() !== '') {
     const rawTokens = envUrl
-      .split(/[\n,]/)
+      .split(/[\n,;]/)
       .map(s => s.trim())
       .filter(s => s.length > 0);
 
     for (const token of rawTokens) {
-      // Nếu là link Google Drive Folder và có API key
+      // Nếu là link Google Drive Folder -> Tự động nạp toàn bộ ảnh trong folder đó!
       const possibleFolderId = extractGoogleDriveFolderId(token);
-      if (possibleFolderId && driveApiKey) {
-        const folderFiles = await fetchGoogleDriveFolderFiles(possibleFolderId, driveApiKey);
-        resultUrls.push(...folderFiles);
-        continue;
+      if (possibleFolderId) {
+        let folderFiles = await fetchPublicGoogleDriveFolderFiles(possibleFolderId);
+        const driveApiKey = process.env.GOOGLE_DRIVE_API_KEY || process.env.GOOGLE_API_KEY;
+        if (folderFiles.length === 0 && driveApiKey) {
+          folderFiles = await fetchGoogleDriveFolderFiles(possibleFolderId, driveApiKey);
+        }
+        if (folderFiles.length > 0) {
+          resultUrls.push(...folderFiles);
+          continue;
+        }
       }
 
-      // Nếu là link file hoặc URL trực tiếp
+      // Nếu là link file đơn lẻ hoặc link ảnh trực tiếp
       const converted = convertGoogleDriveUrl(token);
       if (converted && converted.startsWith('http')) {
         resultUrls.push(converted);
@@ -612,5 +723,6 @@ module.exports = {
   getRandomLocalAvatarFile,
   getLocalAvatarFilename,
   getAvatarCaption,
+  fetchPublicGoogleDriveFolderFiles,
   DEFAULT_FALLBACK_AVATAR
 };
