@@ -106,6 +106,23 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 
 ---
 
+### 📸 Cài Đặt Ảnh Đại Diện Bot Từ Google Drive (Không Lưu Trên Máy)
+
+Thay vì lưu file trên máy local, bạn có thể lưu toàn bộ ảnh avatar trên **Google Drive** để bot tự động lấy:
+
+1. **Upload ảnh lên Google Drive** cá nhân của bạn.
+2. Bấm chuột phải vào ảnh > **Chia sẻ (Share)** > Chọn **"Bất kỳ ai có đường liên kết đều có thể xem"** (Anyone with the link can view).
+3. **Sao chép đường liên kết** (Link có dạng: `https://drive.google.com/file/d/1A2B3C.../view?usp=sharing`).
+4. **Cấu hình trên Vercel** (hoặc file `.env`):
+   - Thêm biến `BOT_AVATAR_URL` và dán link vừa copy vào.
+   - Nếu có **nhiều ảnh** để bot đổi ảnh ngẫu nhiên (random không trùng lặp), chỉ cần dán các link cách nhau bằng dấu phẩy:
+     ```env
+     BOT_AVATAR_URL=https://drive.google.com/file/d/ID1/view, https://drive.google.com/file/d/ID2/view, https://drive.google.com/file/d/ID3/view
+     ```
+   - ⚡ Bot sẽ tự động chuyển đổi các link Google Drive này thành link ảnh trực tiếp tốc độ cao của Google CDN (`lh3.googleusercontent.com/d/ID`) để gửi thẳng vào Zalo mà không qua trang web trung gian!
+
+---
+
 ## Kiểm Tra & Chạy Thử Ở Local
 
 Nếu bạn muốn kiểm tra cấu hình hoặc chạy thử nghiệm tại máy cá nhân:

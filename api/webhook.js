@@ -290,7 +290,7 @@ module.exports = async function handler(req, res) {
 
     // 6. Xử lý các hành động ngữ nghĩa do Gemini quyết định
     if (action.type === 'SEND_AVATAR') {
-      const avatarUrl = avatarService.getBotAvatarUrl(req);
+      const avatarUrl = await avatarService.getBotAvatarUrl(req);
       const caption = action.text || avatarService.getAvatarCaption(senderName, action.isOther);
       console.log(`[Semantic Action: SEND_AVATAR] Gửi ảnh cho ${senderName} (${chatId}): ${avatarUrl} (isOther: ${action.isOther})`);
 
@@ -340,7 +340,7 @@ module.exports = async function handler(req, res) {
     if (avatarService.isBotPhotoRequest(userQuery)) {
       try {
         const isOther = avatarService.isOtherPhotoRequest(userQuery);
-        const avatarUrl = avatarService.getBotAvatarUrl(req);
+        const avatarUrl = await avatarService.getBotAvatarUrl(req);
         const caption = avatarService.getAvatarCaption(senderName, isOther);
         await botService.sendPhoto(chatId, avatarUrl, caption, msgId);
         return res.status(200).json({ ok: true, fallback: 'avatar' });

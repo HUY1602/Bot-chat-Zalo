@@ -81,17 +81,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const botName = bot.name || bot.display_name || bot.username || 'Zalo Bot';
         const botId = bot.id || bot.bot_id || 'Chưa định danh';
 
-        const avatarLabel = envInfo.hasCustomAvatar
-          ? (envInfo.avatarCount > 1
-            ? `📁 ${envInfo.avatarCount} ảnh (Random 🎲)`
-            : (envInfo.localAvatarFile ? `📁 ${envInfo.localAvatarFile}` : '🌐 BOT_AVATAR_URL'))
-          : '✨ Mặc định';
+        let avatarLabel = '✨ Mặc định';
+        if (envInfo.isRemoteAvatar) {
+          avatarLabel = `☁️ ${envInfo.avatarSource} (${envInfo.avatarCount} ảnh 🎲)`;
+        } else if (envInfo.hasCustomAvatar) {
+          avatarLabel = `📁 Local (${envInfo.avatarCount} ảnh 🎲)`;
+        }
 
         profileDetails.innerHTML = `
           <div class="profile-item" style="align-items: center;">
             <span>Ảnh đại diện:</span>
             <div style="display: flex; align-items: center; gap: 8px;">
-              <img src="${envInfo.avatarUrl || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80'}" alt="Bot Avatar" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid #00D2FF; box-shadow: 0 0 10px rgba(0, 210, 255, 0.4);">
+              <a href="${envInfo.avatarUrl || '#'}" target="_blank" title="Bấm để xem ảnh gốc">
+                <img src="${envInfo.avatarUrl || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80'}" alt="Bot Avatar" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid #00D2FF; box-shadow: 0 0 10px rgba(0, 210, 255, 0.4); cursor: pointer;">
+              </a>
               <span class="val" style="color: ${envInfo.hasCustomAvatar ? '#34d399' : '#f59e0b'}; font-size: 0.82rem;">
                 ${avatarLabel}
               </span>

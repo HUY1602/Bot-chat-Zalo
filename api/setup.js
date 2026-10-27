@@ -12,10 +12,10 @@ const avatarService = require('./avatar-service');
 module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     const memStatus = memoryService.getMemoryStatus();
-    const avatarUrl = avatarService.getBotAvatarUrl(req);
+    const avatarDetails = await avatarService.getAvatarSourceDetails(req);
     const localFiles = avatarService.getLocalAvatarFiles();
     const localFile = localFiles.length > 0 ? localFiles[0] : null;
-    const hasCustomAvatar = Boolean(process.env.BOT_AVATAR_URL || localFiles.length > 0);
+    const hasCustomAvatar = Boolean(process.env.BOT_AVATAR_URL || process.env.GOOGLE_DRIVE_FOLDER_ID || localFiles.length > 0);
 
     return res.status(200).json({
       ok: true,
@@ -26,10 +26,12 @@ module.exports = async function handler(req, res) {
         hasUpstashRedis: memStatus.isUpstash,
         memoryProvider: memStatus.provider,
         geminiModel: process.env.GEMINI_MODEL || geminiService.DEFAULT_MODEL,
-        avatarUrl,
+        avatarUrl: avatarDetails.currentSampleUrl,
+        avatarSource: avatarDetails.sourceProvider,
+        avatarCount: avatarDetails.totalAvatars,
+        isRemoteAvatar: avatarDetails.isRemote,
         localAvatarFile: localFile,
-        avatarCount: localFiles.length,
-        avatarList: localFiles,
+        avatarList: avatarDetails.isRemote ? avatarDetails.remoteUrls : localFiles,
         hasCustomAvatar
       }
     });
