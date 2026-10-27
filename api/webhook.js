@@ -145,9 +145,10 @@ module.exports = async function handler(req, res) {
 
     // 2.5 Yêu cầu xem mặt / hình / ảnh / avatar của Bot
     if (avatarService.isBotPhotoRequest(userQuery)) {
+      const isOther = avatarService.isOtherPhotoRequest(userQuery);
       const avatarUrl = avatarService.getBotAvatarUrl(req);
-      const caption = avatarService.getAvatarCaption(senderName);
-      console.log(`[Avatar Request] Gửi ảnh đại diện cho ${senderName} (${chatId}): ${avatarUrl}`);
+      const caption = avatarService.getAvatarCaption(senderName, isOther);
+      console.log(`[Avatar Request] Gửi ảnh đại diện cho ${senderName} (${chatId}): ${avatarUrl} (isOther: ${isOther})`);
 
       try {
         const sendResult = await botService.sendPhoto(chatId, avatarUrl, caption, msgId);

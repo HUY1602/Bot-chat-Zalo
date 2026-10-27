@@ -2,7 +2,8 @@
   "version": 2,
   "functions": {
     "api/*.js": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "public/**"
     }
   }
 }

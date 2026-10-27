@@ -57,10 +57,47 @@ function isBotPhotoRequest(text) {
     return false;
   }
 
+  // 1.5. Yêu cầu xem ảnh khác / ảnh nữa / tấm khác (Ví dụ: "cho a ảnh khác", "ảnh khác", "tấm khác đi", "ảnh nữa")
+  const otherPhotoRegex = /(?:ảnh|hình|tấm|avatar|mặt|dung\s+nhan)\s+(?:khác|nữa|mới|tiếp)/i;
+  const otherPhotoRegexNoTone = /(?:anh|hinh|tam|avatar|mat|dung\s+nhan)\s+(?:khac|nua|moi|tiep)/i;
+  if (otherPhotoRegex.test(raw) || otherPhotoRegexNoTone.test(noTone)) {
+    return true;
+  }
+
+  // Câu dạng ngắn gọn: "ảnh khác", "tấm khác", "hình khác"
+  if (/^(?:ảnh|hình|tấm|avatar)\s+(?:khác|nữa|mới)(?:\s+(?:đi|nào|với|nha|nhé|coi|xem))?$/i.test(raw)) {
+    return true;
+  }
+  if (/^(?:anh|hinh|tam|avatar)\s+(?:khac|nua|moi)(?:\s+(?:di|nao|voi|nha|nhe|coi|xem))?$/i.test(noTone)) {
+    return true;
+  }
+
+  // Câu yêu cầu: "cho a ảnh...", "cho e xem...", "cho mình tấm ảnh..." (hỗ trợ viết tắt a, e, c, m)
+  const pronounPatternWithTone = '(?:anh|chị|em|mình|tôi|tao|a|c|e|m)';
+  const pronounPatternNoTone = '(?:anh|chi|em|minh|toi|tao|a|c|e|m)';
+  const photoActionWithTone = '(?:cho|xin|gửi|show|coi|ngắm|xem|bật|chụp)';
+  const photoActionNoTone = '(?:cho|xin|gui|show|coi|ngam|xem|bat|chup)';
+
+  const requestWithPronoun = new RegExp(
+    `^(?:${photoActionWithTone}\\s+)?${pronounPatternWithTone}\\s*(?:xem|coi|ngắm|xin)?\\s*(?:thêm\\s+)?(?:tấm|bức|kiểu|cái)?\\s*(?:ảnh|hình|avatar|tấm|mặt|dung\\s+nhan)`,
+    'i'
+  );
+  if (requestWithPronoun.test(raw)) {
+    return true;
+  }
+
+  const requestWithPronounNoTone = new RegExp(
+    `^(?:${photoActionNoTone}\\s+)?${pronounPatternNoTone}\\s*(?:xem|coi|ngam|xin)?\\s*(?:them\\s+)?(?:tam|buc|kieu|cai)?\\s*(?:anh|hinh|avatar|tam|mat|dung\\s+nhan)`,
+    'i'
+  );
+  if (requestWithPronounNoTone.test(noTone)) {
+    return true;
+  }
+
   // 2. Yêu cầu trực tiếp xem mặt / hình / ảnh / avatar / dung nhan
   // Ví dụ: "cho xem mặt", "cho anh xem ảnh", "cho mình xin tấm hình", "xem mặt bot", "gửi ảnh em"
-  const requestVerbWithTone = '(?:cho\\s+(?:anh|chị|em|mình|tôi|tao)?\\s*(?:xem|coi|ngắm|xin)|xem|coi|ngắm|xin|gửi|show|chụp|bật)';
-  const requestVerbNoTone = '(?:cho\\s+(?:anh|chi|em|minh|toi|tao)?\\s*(?:xem|coi|ngam|xin)|xem|coi|ngam|xin|gui|show|chup|bat)';
+  const requestVerbWithTone = '(?:cho\\s+(?:anh|chị|em|mình|tôi|tao|a|c|e|m)?\\s*(?:xem|coi|ngắm|xin)?|xem|coi|ngắm|xin|gửi|show|chụp|bật)';
+  const requestVerbNoTone = '(?:cho\\s+(?:anh|chi|em|minh|toi|tao|a|c|e|m)?\\s*(?:xem|coi|ngam|xin)?|xem|coi|ngam|xin|gui|show|chup|bat)';
   const photoSubjectWithTone = '(?:mặt|hình|ảnh|ảnh đại diện|hình đại diện|avatar|dung nhan|nhan sắc|chân dung|selfie|khuôn mặt|diện mạo)';
   const photoSubjectNoTone = '(?:mat|hinh|anh|anh dai dien|hinh dai dien|avatar|dung nhan|nhan sac|chan dung|selfie|khuon mat|dien mao)';
 
@@ -137,19 +174,42 @@ function isBotPhotoRequest(text) {
   return false;
 }
 
+/**
+ * Kiểm tra xem người dùng có phải đang xin đổi sang "ảnh khác" hay không
+ * @param {string} text 
+ * @returns {boolean}
+ */
+function isOtherPhotoRequest(text) {
+  if (!text) return false;
+  const raw = text.toLowerCase();
+  const noTone = removeVietnameseTones(raw);
+  return /(?:khác|nữa|mới|tiếp)/i.test(raw) || /(?:khac|nua|moi|tiep)/i.test(noTone);
+}
+
 // Các đuôi file ảnh được hỗ trợ
 const SUPPORTED_IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
 
+// Danh sách ảnh mặc định đã được commit vào repository (đảm bảo luôn có kể cả trên Serverless CDN)
+const DEFAULT_AVATAR_LIST = [
+  'avatar/avatar_01.jpg',
+  'avatar/avatar_02.jpg',
+  'avatar/avatar_03.jpg',
+  'avatar/avatar_04.jpg',
+  'avatar/avatar_05.jpg',
+  'avatar/avatar_06.jpg'
+];
+
 /**
- * Quét và lấy tất cả các file ảnh trong folder public/avatar/ (hoặc public/ nếu có)
- * @returns {string[]} Danh sách relative path ví dụ: ['avatar/avatar_01.jpg', 'avatar/avatar_02.png']
+ * Quét và lấy tất cả các file ảnh trong folder public/avatar/
+ * Kết hợp quét filesystem động và danh sách DEFAULT_AVATAR_LIST
+ * @returns {string[]} Danh sách relative path ví dụ: ['avatar/avatar_01.jpg', ...]
  */
 function getLocalAvatarFiles() {
   const publicDir = path.join(__dirname, '../public');
   const avatarDir = path.join(publicDir, 'avatar');
-  const results = [];
+  const resultsSet = new Set(DEFAULT_AVATAR_LIST);
 
-  // 1. Quét thư mục public/avatar/
+  // Quét thư mục public/avatar/ trên ổ đĩa
   try {
     if (fs.existsSync(avatarDir)) {
       const items = fs.readdirSync(avatarDir);
@@ -157,7 +217,7 @@ function getLocalAvatarFiles() {
         if (item.startsWith('.')) continue;
         const ext = path.extname(item).toLowerCase();
         if (SUPPORTED_IMAGE_EXTS.includes(ext)) {
-          results.push(`avatar/${item}`);
+          resultsSet.add(`avatar/${item}`);
         }
       }
     }
@@ -165,34 +225,31 @@ function getLocalAvatarFiles() {
     console.warn('Lỗi khi quét thư mục public/avatar/:', err.message);
   }
 
-  // 2. Nếu thư mục avatar/ không có ảnh, quét fallback ở thư mục gốc public/
-  if (results.length === 0) {
-    try {
-      if (fs.existsSync(publicDir)) {
-        for (const filename of LOCAL_AVATAR_FILES) {
-          const fullPath = path.join(publicDir, filename);
-          if (fs.existsSync(fullPath)) {
-            results.push(filename);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Lỗi khi quét thư mục public/:', err.message);
-    }
-  }
-
-  return results;
+  return Array.from(resultsSet);
 }
 
+// Lưu vết ảnh vừa gửi gần nhất để lần sau chọn KHÔNG BỊ TRÙNG LẶP
+let lastSentAvatar = null;
+
 /**
- * Lấy ngẫu nhiên 1 file ảnh từ folder avatar
- * @returns {string|null} Tên relative path file ảnh (ví dụ 'avatar/avatar_01.jpg') hoặc null
+ * Lấy ngẫu nhiên 1 file ảnh từ folder avatar (TRÁNH TRÙNG LẶP LIÊN TIẾP)
+ * @returns {string|null} Tên relative path file ảnh (ví dụ 'avatar/avatar_03.jpg')
  */
 function getRandomLocalAvatarFile() {
   const files = getLocalAvatarFiles();
   if (files.length === 0) return null;
-  const randomIndex = Math.floor(Math.random() * files.length);
-  return files[randomIndex];
+  if (files.length === 1) return files[0];
+
+  // Loại trừ ảnh vừa gửi gần nhất để đảm bảo mỗi lần gửi một ảnh khác nhau
+  const candidates = lastSentAvatar
+    ? files.filter(f => f !== lastSentAvatar)
+    : files;
+
+  const listToPick = candidates.length > 0 ? candidates : files;
+  const randomIndex = Math.floor(Math.random() * listToPick.length);
+  const chosen = listToPick[randomIndex];
+  lastSentAvatar = chosen;
+  return chosen;
 }
 
 /**
@@ -203,12 +260,7 @@ function getLocalAvatarFilename() {
 }
 
 /**
- * Lấy URL ảnh đại diện của Bot (Mỗi lần gọi sẽ chọn RANDOM 1 tấm trong folder avatar)
- * Ưu tiên:
- * 1. File trong thư mục public/avatar/ (random 1 tấm)
- * 2. Biến môi trường BOT_AVATAR_URL (hỗ trợ nhiều link cách nhau bằng dấu phẩy)
- * 3. Fallback ảnh mặc định
- * 
+ * Lấy URL ảnh đại diện của Bot (Mỗi lần gọi sẽ chọn RANDOM 1 tấm trong folder avatar và KHÔNG TRÙNG tấm cũ)
  * @param {object} [req] - Optional request object từ webhook
  * @returns {string} - Public HTTPS URL của ảnh đại diện được chọn ngẫu nhiên
  */
@@ -216,7 +268,6 @@ function getBotAvatarUrl(req = null) {
   // 1. Quét và chọn ngẫu nhiên 1 ảnh trong folder public/avatar/
   const localFile = getRandomLocalAvatarFile();
   if (localFile) {
-    // Xác định base domain
     let host = null;
 
     if (req && req.headers) {
@@ -245,7 +296,12 @@ function getBotAvatarUrl(req = null) {
   if (envUrl && typeof envUrl === 'string') {
     const urls = envUrl.split(',').map(u => u.trim()).filter(u => u.startsWith('http'));
     if (urls.length > 0) {
-      return urls[Math.floor(Math.random() * urls.length)];
+      const candidates = lastSentAvatar && urls.length > 1
+        ? urls.filter(u => u !== lastSentAvatar)
+        : urls;
+      const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+      lastSentAvatar = chosen;
+      return chosen;
     }
   }
 
@@ -256,10 +312,22 @@ function getBotAvatarUrl(req = null) {
 /**
  * Tạo lời nhắn (caption) dễ thương khi gửi ảnh cho người dùng
  * @param {string} senderName - Tên người hỏi
+ * @param {boolean} [isOther=false] - Người dùng xin ảnh khác hay không
  * @returns {string}
  */
-function getAvatarCaption(senderName = 'anh/chị') {
+function getAvatarCaption(senderName = 'anh/chị', isOther = false) {
   const name = senderName && senderName !== 'Thành viên' ? senderName : 'anh/chị';
+
+  if (isOther) {
+    const otherCaptions = [
+      `Dạ đây là góc khác của em nè ${name} ơi! 🫧 Em đổi tấm khác cho ${name} ngắm nè 🥰 Xinh không ạ? ✨`,
+      `Dạ tấm ảnh khác của em đây nè ${name}! 🌸 Bọt biển cute có nhiều ảnh lắm nè hihi 🫧`,
+      `Dạ em đổi ảnh mới cho ${name} liền nè! ✨ Tấm này nhìn em có đáng yêu không nè? 🥰`,
+      `Dạ hình khác của em đây nè ${name} ơi! 🫧 Mỗi lần ${name} hỏi là em lại biến hình đó nha 🌸`
+    ];
+    return otherCaptions[Math.floor(Math.random() * otherCaptions.length)];
+  }
+
   const captions = [
     `Dạ đây là hình của em nè ${name} ơi! 🫧 Em là Bọt biển cute đó ạ 🥰 Nhìn em có đáng yêu không nè? ✨`,
     `Dạ dung nhan của em đây nè ${name}! 🌸 Em gửi tấm hình xịn nhất của em cho ${name} ngắm nè 🫧`,
@@ -270,6 +338,7 @@ function getAvatarCaption(senderName = 'anh/chị') {
 
 module.exports = {
   isBotPhotoRequest,
+  isOtherPhotoRequest,
   getBotAvatarUrl,
   getLocalAvatarFiles,
   getRandomLocalAvatarFile,

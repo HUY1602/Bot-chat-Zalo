@@ -25,6 +25,20 @@ const testCases = [
   { text: 'mặt em thế nào', expected: true },
   { text: 'xem dung nhan', expected: true },
   { text: 'bạn trông thế nào', expected: true },
+  // Các câu xin ảnh khác & viết tắt:
+  { text: 'Cho a ảnh khác', expected: true },
+  { text: 'cho a ảnh khác', expected: true },
+  { text: 'ảnh khác', expected: true },
+  { text: 'tấm khác', expected: true },
+  { text: 'hình khác', expected: true },
+  { text: 'cho ảnh khác', expected: true },
+  { text: 'cho a xem tấm khác', expected: true },
+  { text: 'ảnh khác đi', expected: true },
+  { text: 'gửi ảnh khác', expected: true },
+  { text: 'ảnh nữa đi', expected: true },
+  { text: 'cho e xem ảnh', expected: true },
+  { text: 'cho m xem mặt', expected: true },
+  { text: 'cho c xem hình', expected: true },
 
   // Cần tránh (false)
   { text: 'ảnh hưởng của bão số 3', expected: false },
