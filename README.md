@@ -1,30 +1,30 @@
-# 🤖 Zalo Gemini Bot - Trợ Lý AI Hỏi Đáp Nhóm 24/7 (Vercel Serverless)
+# Zalo Gemini Bot - Trợ Lý AI Hỏi Đáp Nhóm 24/7 (Vercel Serverless)
 
-Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemini AI** (`gemini-2.5-flash`), triển khai hoàn toàn **miễn phí trên Vercel** theo mô hình Serverless Function hoạt động bền bỉ **24/7** không cần máy chủ riêng.
+Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemini AI** (`gemini-3.5-flash`), triển khai hoàn toàn **miễn phí trên Vercel** theo mô hình Serverless Function hoạt động bền bỉ **24/7** không cần máy chủ riêng.
 
 ---
 
-## 🌟 Tính Năng Nổi Bật
+## Tính Năng Nổi Bật
 
-- ⚡ **Chạy 24/7 Miễn Phí Trên Vercel**: Sử dụng Vercel Serverless Function, tự động scale, không tốn chi phí server hay VPS.
-- 🧠 **Tích hợp Google Gemini 2.5 Flash**: Phản hồi siêu nhanh (500ms - 1.5s), thông minh, xử lý đa lĩnh vực bằng tiếng Việt tự nhiên.
-- 🎨 **Tạo Ảnh & Vẽ Tranh AI (Text-to-Image)**: Tự động nhận diện yêu cầu vẽ tranh tiếng Việt (`vẽ...` hoặc `/draw...`), tối ưu hóa prompt qua Gemini và tạo tác phẩm nghệ thuật 8K sắc nét (mô hình Flux) gửi trực tiếp vào nhóm Zalo.
-- 📸 **Gửi Ảnh Đại Diện Tự Động**: Khi thành viên yêu cầu xem mặt / xem hình / xem ảnh của bot, bot sẽ gửi ngay ảnh đại diện kèm lời chào dễ thương.
-- 👥 **Hỗ Trợ Nhóm Chat Zalo Tuyệt Vời**:
+-  **Chạy 24/7 Miễn Phí Trên Vercel**: Sử dụng Vercel Serverless Function, tự động scale, không tốn chi phí server hay VPS.
+-  **Tích hợp Google Gemini 2.5 Flash**: Phản hồi siêu nhanh (500ms - 1.5s), thông minh, xử lý đa lĩnh vực bằng tiếng Việt tự nhiên.
+-  **Tạo Ảnh & Vẽ Tranh AI (Text-to-Image)**: Tự động nhận diện yêu cầu vẽ tranh tiếng Việt (`vẽ...` hoặc `/draw...`), tối ưu hóa prompt qua Gemini và tạo tác phẩm nghệ thuật 8K sắc nét (mô hình Flux) gửi trực tiếp vào nhóm Zalo.
+-  **Gửi Ảnh Đại Diện Tự Động**: Khi thành viên yêu cầu xem mặt / xem hình / xem ảnh của bot, bot sẽ gửi ngay ảnh đại diện kèm lời chào dễ thương.
+-  **Hỗ Trợ Nhóm Chat Zalo Tuyệt Vời**:
   - Nhận diện khi được thành viên **@mention** (`@Tên_Bot [câu hỏi]`).
   - Tự động bắt sự kiện khi thành viên **Reply (Trả lời)** vào tin nhắn của bot.
   - Tự động làm sạch thẻ tag để trích xuất đúng câu hỏi gửi cho AI.
-- 🎨 **Tối Ưu Định Dạng Cho Zalo**:
+-  **Tối Ưu Định Dạng Cho Zalo**:
   - Tự động chuẩn hóa câu trả lời: gạch đầu dòng rõ ràng, in đậm từ khóa, kèm emoji sinh động.
   - Tự động chia nhỏ tin nhắn (chunking) thông minh nếu phản hồi dài vượt quá 2.000 ký tự (giới hạn của Zalo).
-- 🛠️ **Giao Diện Web Quản Trị Đẹp Mắt**:
+-  **Giao Diện Web Quản Trị Đẹp Mắt**:
   - Tích hợp sẵn Dashboard cấu hình Webhook **1-Click** ngay trên trình duyệt.
   - Kiểm tra trạng thái kết nối bot (`testWebhook`, `getMe`).
   - Khung thử nghiệm tương tác trực tiếp với Gemini AI (Chat Simulator).
 
 ---
 
-## 🏗️ Cấu Trúc Dự Án
+## Cấu Trúc Dự Án
 
 ```
 ├── api/
@@ -48,7 +48,7 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 
 ---
 
-## 🚀 Hướng Dẫn Triển Khai Lên Vercel (Chạy 24/7)
+## Hướng Dẫn Triển Khai Lên Vercel (Chạy 24/7)
 
 ### Bước 1: Chuẩn bị Khóa API
 
@@ -76,7 +76,7 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 1. Mở đường link Vercel của bạn trên trình duyệt (ví dụ: `https://bot-chat-zalo-huy.vercel.app`).
 2. Giao diện Dashboard quản trị hiện đại sẽ xuất hiện:
    - Bấm nút **"Lấy Domain Này"** (ô URL sẽ tự điền `https://bot-chat-zalo-huy.vercel.app/api/webhook`).
-   - Bấm nút **"🚀 Kích Hoạt Webhook Lên Zalo"**.
+   - Bấm nút **"Kích Hoạt Webhook Lên Zalo"**.
 3. Khi thấy thông báo màu xanh **"ĐĂNG KÝ WEBHOOK THÀNH CÔNG"**, hệ thống Zalo đã liên kết với Vercel của bạn!
 
 *(Bạn cũng có thể chạy lệnh từ máy tính: `npm run set-webhook https://bot-chat-zalo-huy.vercel.app/api/webhook`)*
@@ -98,7 +98,7 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 
 ---
 
-## 💻 Kiểm Tra & Chạy Thử Ở Local
+## Kiểm Tra & Chạy Thử Ở Local
 
 Nếu bạn muốn kiểm tra cấu hình hoặc chạy thử nghiệm tại máy cá nhân:
 
