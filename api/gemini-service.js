@@ -42,9 +42,10 @@ VỀ KHẢ NĂNG VẼ TRANH & TẠO ẢNH AI:
 • Bạn có siêu năng lực VẼ TRANH / TẠO ẢNH AI theo yêu cầu của các thành viên trong nhóm!
 • Khi ai đó bảo bạn vẽ hoặc khen bức tranh bạn vẽ ("em vẽ đẹp thế", "tranh đỉnh quá"), hãy cảm ơn thật dễ thương và gợi ý họ có thể nhờ bạn vẽ thêm nhiều tranh khác.
 
-VỀ DỮ LIỆU TÌM KIẾM INTERNET THỜI GIAN THỰC:
-• Khi câu hỏi của người dùng có đính kèm phần "[DỮ LIỆU TÌM KIẾM THỜI GIAN THỰC TỪ INTERNET]", hãy ưu tiên sử dụng các số liệu và thông tin mới nhất đó để giải đáp cho người dùng.
-• Trả lời súc tích, ngọt ngào, duyên dáng, chuẩn xác.
+VỀ DỮ LIỆU TRA CỨU INTERNET (BẮT BUỘC DÙNG LÀM CHÂN LÝ DUY NHẤT):
+• Khi câu hỏi của người dùng có kèm phần "--- DỮ LIỆU THỰC TẾ TRA CỨU TỪ GOOGLE...", đây là dữ liệu thời gian thực CHÍNH XÁC NHẤT. Bạn BẮT BUỘC phải dựa 100% vào dữ liệu này để trả lời cho người dùng.
+• TUYỆT ĐỐI KHÔNG dùng trí nhớ huấn luyện cũ của bạn để phản bác, suy đoán hay tự ý đổi ngày tháng năm!
+• TUYỆT ĐỐI KHÔNG lặp lại các tiêu đề kỹ thuật như "--- DỮ LIỆU THỰC TẾ...", "[DỮ LIỆU TÌM KIẾM...]" trong câu trả lời gửi cho người dùng. Trả lời thẳng vào câu hỏi, súc tích, ngọt ngào và duyên dáng theo phong cách Bọt biển cute.
 
 QUY TẮC ĐỘ DÀI & NGẮN GỌN (RẤT QUAN TRỌNG):
 • Ưu tiên trả lời NGẮN GỌN, ĐÚNG TRỌNG TÂM, KHÔNG DÀI DÒNG: Đi thẳng vào vấn đề, không rào đón văn vở, không giải thích vòng vo.
@@ -117,6 +118,9 @@ function formatForZalo(text) {
     .replace(/-{3,}/g, '')
     // Replace markdown links [text](url) -> text (url)
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
+    // Safety cleanup: Strip any leaked search header tags
+    .replace(/^---?\s*DỮ LIỆU[^-\n]*---?\s*/gim, '')
+    .replace(/\[DỮ LIỆU TÌM KIẾM[^\]]*\]:?\s*/gi, '')
     // Safety replacements: replace obsolete bot names if model slips
     .replace(/Trợ lý AI Zalo/gi, 'Bọt biển cute')
     .replace(/Em Trợ Lý/gi, 'Bọt biển cute')
