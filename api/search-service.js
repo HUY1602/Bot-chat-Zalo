@@ -31,76 +31,86 @@ function shouldSearchWeb(text) {
   const raw = text.trim().toLowerCase();
   if (raw.length < 2) return false;
 
-  // --- KHÔNG tìm kiếm: Lệnh hệ thống ---
-  if (/^\/(?:draw|image|ve|paint|art|gen|ping|reset|help|clear|forget|start)\b/i.test(raw)) {
-    return false;
-  }
+  // 1. KHÔNG tìm kiếm: Lệnh hệ thống
+  if (/^\/(?:draw|image|ve|paint|art|gen|ping|reset|help|clear|forget|start)\b/i.test(raw)) return false;
 
-  // --- KHÔNG tìm kiếm: Yêu cầu xem ảnh/avatar bot ---
+  // 2. KHÔNG tìm kiếm: Yêu cầu xem avatar
   if (/\b(?:xem|gửi|cho|đổi|show|khoe|nhìn|ngắm)\b.{0,15}\b(?:ảnh|mặt|hình|avatar|dung nhan)\b/i.test(raw) ||
-      /\b(?:ảnh|mặt|hình)\b.{0,10}\b(?:em|bot|bọt biển)\b/i.test(raw)) {
-    return false;
-  }
+      /\b(?:ảnh|mặt|hình)\b.{0,10}\b(?:em|bot|bọt biển)\b/i.test(raw)) return false;
 
-  // --- KHÔNG tìm kiếm: Yêu cầu vẽ tranh AI ---
+  // 3. KHÔNG tìm kiếm: Yêu cầu vẽ tranh AI
   if (/^(?:vẽ|tạo\s+ảnh|phác\s+họa|lên\s+hình)\s+/i.test(raw)) return false;
 
   const unaccented = removeVietnameseTones(raw);
 
-  // --- KHÔNG tìm kiếm: Chào hỏi thuần túy (cả có dấu lẫn không dấu) ---
-  const PURE_SMALLTALK = /^(?:chào|chao|hi+|hello|hey|ê|e|alo|helo|xin chào|xin chao|ok|okay|oke|good|nice|được rồi|duoc roi|ừ+|u+|uh+|dạ ok|da ok|👋|🙋)\s*[!.]*$/i;
-  if (PURE_SMALLTALK.test(unaccented)) return false;
-  if (/^(?:chào|chao|hi|hello|ê|e)\s+(?:em|bot|bọt biển|bot bien|bọt biển cute|bot bien cute)\s*[!.]*$/i.test(unaccented)) return false;
+  // 4. KHÔNG tìm kiếm: Sáng tạo nội dung (thơ, truyện cười, lời chúc, văn mẫu, viết kịch bản)
+  if (/\b(?:viet|lam|che)\s+(?:cho\s+anh\s+|cho\s+em\s+)?(?:bai\s+)?(?:tho|van|kich|rap|nhac|status|stt|caption|loi chuc)\b/i.test(unaccented)) return false;
+  if (/\b(?:ke|noi)\s+(?:cho\s+anh\s+|cho\s+em\s+)?(?:chuyen\s+)?(?:cuoi|ma|tich|ngungon|vui)\b/i.test(unaccented)) return false;
+  if (/\b(?:dat ten|nghi ten|goi y ten)\s+(?:cho\s+)?(?:con|meo|cho|be|nhom)\b/i.test(unaccented)) return false;
 
-  // --- KHÔNG tìm kiếm: Hỏi danh tính / khả năng của bot ---
-  if (/^(?:em tên gì|em ten gi|bạn là ai|ban la ai|em là ai|em la ai|tên em là gì|ten em la gi|bot tên gì|bot ten gi|em làm được gì|em lam duoc gi|em có thể làm gì|em co the lam gi)\s*[?!.]*$/i.test(unaccented)) return false;
+  // 5. KHÔNG tìm kiếm: Dịch thuật, ngoại ngữ thuần túy
+  if (/\b(?:dich|translate)\s+(?:sang|giup|ho|cau nay|doan nay|tu nay)\b/i.test(unaccented)) return false;
+  if (/\b(?:tieng anh|tieng nhat|tieng han|tieng trung)\s+la\s+gi\b/i.test(unaccented)) return false;
 
-  // --- KHÔNG tìm kiếm: Hỏi thăm trạng thái / cảm xúc của bot ---
-  if (/^(?:em|bọt biển|bot bien)\s+(?:khỏe|khoe|vui|ổn|on|mệt|met|buồn|buon)\s*(?:không|khong)?\s*[?!.]*$|^(?:khỏe không|khoe khong|ổn không|on khong|vui không|vui khong|ăn cơm chưa|an com chua|ngủ chưa|ngu chua)\s*[?!.]*$/i.test(unaccented)) return false;
+  // 6. KHÔNG tìm kiếm: Chào hỏi, cảm ơn, tạm biệt, chúc ngủ ngon
+  const SMALLTALK_PATTERNS = [
+    /^(?:chao|hi+|hello|hey|ê|e|alo|helo|xin chao|ok|okay|oke|good|nice|duoc roi|u+|uh+|da ok|bye|tam biet|g9|bye bye|👋|🙋)\b/i,
+    /\b(?:chuc ngu ngon|ngu ngon|ngu som|ngu di|ngu day|chuc buoi sang|chuc ngay moi|ngay tot lanh|tam biet|hen gap lai|bye bye)\b/i,
+    /\b(?:cam on|thank|thanks|biet on|da ta)\b/i,
+    /\b(?:khen|gioi qua|thong minh qua|cute qua|de thuong qua|dang yeu qua|dinh qua|xuat sac|tuyet voi)\b/i
+  ];
+  for (const p of SMALLTALK_PATTERNS) {
+    if (p.test(unaccented)) return false;
+  }
 
-  // Chuỗi kết hợp có dấu + không dấu để khớp nhanh, toàn diện
+  // 7. KHÔNG tìm kiếm: Tâm sự, cảm xúc, trạng thái cá nhân
+  if (/\b(?:anh|em|minh|tui|to)\s+(?:buon|vui|met|chan|nho|yeu|thich|co don|stress|that tinh|dau dau|om|benh)\b/i.test(unaccented)) {
+    if (!/\b(?:uong thuoc|cach chua|trieu chung|benh vien|bac si|o dau)\b/i.test(unaccented)) {
+      return false;
+    }
+  }
+
+  // 8. KHÔNG tìm kiếm: Hỏi danh tính, sở thích, tình cảm của bot
+  if (/\b(?:em|bot|bot bien)\s+(?:ten gi|la ai|may tuoi|o dau|thich gi|an gi|yeu ai|co nguoi yeu chua|lam duoc gi|biet lam gi)\b/i.test(unaccented)) return false;
+  if (/^(?:em|bot bien)\s+(?:khoe|vui|on|met|buon)\s*(?:khong)?\s*[?!.]*$/i.test(unaccented)) return false;
+
+  // 9. KHÔNG tìm kiếm: Toán học / Code thuần túy
+  if (/^[\d\s\+\-\*\/\^\(\)\.\,\=]+$/.test(raw) || /^\d+\s*[\+\-\*\/]\s*\d+/.test(unaccented)) return false;
+  if (/\b(?:viet code|viet ham|debug|fix loi|code javascript|code python|code c\+\+)\b/i.test(unaccented)) return false;
+
+  // ==========================================================
+  // --- NÊN TÌM KIẾM: Các câu hỏi thông tin thực tế xác định ---
+  // ==========================================================
   const combined = raw + ' ' + unaccented;
 
-  // ==========================================================
-  // --- TÌM KIẾM: Mọi câu còn lại có dấu hiệu câu hỏi thực tế ---
-  // ==========================================================
+  // 1. Giải thưởng, danh hiệu, bảng xếp hạng
+  if (/\b(?:qua bong|bong vang|bong bac|bong dong|ballon d'?or|chiec giay vang|vua pha luoi|cau thu xuat sac|giai thuong|trao giai|de cu|doat giai|vinh danh|hoa hau|a hau|oscar|grammy|emmy|golden globe|nobel|bang xep hang)\b/i.test(combined)) return true;
 
-  // Giải thưởng, danh hiệu thể thao & văn hóa (CỰC KỲ QUAN TRỌNG: Quả bóng vàng, bạc, đồng,...)
-  if (/\b(?:quả bóng|qua bong|bóng vàng|bong vang|bóng bạc|bong bac|bóng đồng|bong dong|ballon d'?or|chiếc giày vàng|chiec giay vang|vua phá lưới|vua pha luoi|cầu thủ xuất sắc|cau thu xuat sac|giải thưởng|giai thuong|trao giải|trao giai|đề cử|de cu|đoạt giải|doat giai|vinh danh|hoa hậu|hoa hau|á hậu|a hau|oscar|grammy|emmy|golden globe|nobel)\b/i.test(combined)) return true;
+  // 2. Thể thao, trận đấu, tỷ số
+  if (/\b(?:bong da|bong ro|tennis|cau long|boxing|boi|olympic|sea games|v.?league|premier league|la liga|serie a|bundesliga|champions league|c1|world cup|euro|tran dau|ty so|ti so|cau thu|huan luyen vien|doi tuyen|vo dich|el clasico|clasico|derby)\b/i.test(combined)) return true;
 
-  // Từ hỏi rõ ràng (có dấu & không dấu)
-  if (/\b(?:khi nào|khi nao|bao giờ|bao gio|ngày nào|ngay nao|ở đâu|o dau|thế nào|the nao|ra sao|bao nhiêu|bao nhieu|bao lâu|bao lau|tại sao|tai sao|vì sao|vi sao|ai là|ai la|ai đoạt|ai doat|ai thắng|ai thang|ai vô địch|ai vo dich|cái gì|cai gi|điều gì|dieu gi|chuyện gì|chuyen gi|lịch|lich|thông tin|thong tin)\b/i.test(combined)) return true;
+  // 3. Thời tiết, thiên tai
+  if (/\b(?:thoi tiet|nhiet do|do am|troi mua|mua to|mua phun|troi nang|bao so|ap thap|lu lut|du bao)\b/i.test(unaccented) || /\b(?:mưa|nắng|bão|lũ|lụt)\b/i.test(raw)) return true;
 
-  // Thời gian / sự kiện hiện tại
-  if (/\b(?:hôm nay|hom nay|ngày mai|ngay mai|tuần này|tuan nay|tháng này|thang nay|năm nay|nam nay|hiện tại|hien tai|hiện nay|hien nay|mới nhất|moi nhat|gần đây|gan day|vừa|vua|đang|dang|sắp|sap|sắp tới|sap toi|sắp ra|sap ra|ra mắt|ra mat|phát hành|phat hanh|khởi chiếu|khoi chieu|khai mạc|khai mac)\b/i.test(combined)) return true;
+  // 4. Giá cả, tài chính, thị trường
+  if (/\b(?:gia|ty gia|ti gia|hoi doai|lai suat|chung khoan|co phieu|bitcoin|crypto|vang|bac|bat dong san|nha dat|xang|dau)\b/i.test(unaccented)) return true;
 
-  // Sự kiện giải trí / âm nhạc / phim
-  if (/\b(?:concert|tour|show|festival|lễ hội|le hoi|buổi diễn|buoi dien|lịch diễn|lich dien|lịch chiếu|lich chieu|vé|ve|album|ca sĩ|ca si|diễn viên|dien vien|đạo diễn|dao dien|phim|movie|anime|manga)\b/i.test(combined)) return true;
+  // 5. Sự kiện giải trí, concert, phim ảnh
+  if (/\b(?:concert|tour|show|festival|le hoi|buoi dien|lich dien|lich chieu|ve concert|khoi chieu|cong chieu)\b/i.test(unaccented)) return true;
 
-  // Thể thao (có dấu & không dấu)
-  if (/\b(?:bóng đá|bong da|bóng rổ|bong ro|tennis|cầu lông|cau long|boxing|bơi|boi|olympic|sea games|v.?league|premier league|la liga|serie a|bundesliga|champions league|c1|world cup|euro|trận đấu|tran dau|tỷ số|ty so|ti so|bảng xếp hạng|bang xep hang|cầu thủ|cau thu|huấn luyện viên|huan luyen vien|đội tuyển|doi tuyen|vô địch|vo dich|el clasico|clasico|derby)\b/i.test(combined)) return true;
+  // 6. Tin tức, sự kiện nóng, thời sự
+  if (/\b(?:tin tuc|thoi su|ban tin|scandal|thien tai|tai nan|su co|ket qua)\b/i.test(unaccented)) return true;
 
-  // Giá cả / thị trường
-  if (/\b(?:giá|gia|tỷ giá|ty gia|ti gia|hối đoái|hoi doai|lãi suất|lai suat|chứng khoán|chung khoan|cổ phiếu|co phieu|bitcoin|crypto|vàng|vang|bạc|bac|bất động sản|bat dong san|nhà đất|nha dat|xăng|xang|dầu|dau)\b/i.test(combined)) return true;
+  // 7. Thời gian hiện tại kết hợp từ hỏi
+  if (/\b(?:hom nay|ngay mai|tuan nay|thang nay|nam nay|hien tai|hien nay|moi nhat|gan day|vua)\b/i.test(unaccented) &&
+      /\b(?:la gi|khi nao|bao gio|o dau|the nao|ai|may gio|ngay may|co gi|chuyen gi)\b/i.test(unaccented)) {
+    return true;
+  }
 
-  // Thời tiết
-  if (/\b(?:thời tiết|thoi tiet|nhiệt độ|nhiet do|độ ẩm|do am|mưa|mua|nắng|nang|bão|bao|lũ|lu|lụt|lut|áp thấp|ap thap)\b/i.test(combined)) return true;
-
-  // Công nghệ / sản phẩm
-  if (/\b(?:iphone|samsung|android|ios|windows|macbook|playstation|xbox|app|ứng dụng|ung dung|game|xiaomi|oppo)\b/i.test(combined)) return true;
-
-  // Chính trị / xã hội / y tế
-  if (/\b(?:bầu cử|bau cu|chính phủ|chinh phu|thủ tướng|thu tuong|tổng thống|tong thong|quốc hội|quoc hoi|luật|luat|vaccine|dịch|dich|virus|bệnh|benh|thuốc|thuoc|sức khỏe|suc khoe)\b/i.test(combined)) return true;
-
-  // Du lịch / giao thông
-  if (/\b(?:vé máy bay|ve may bay|chuyến bay|chuyen bay|vé tàu|ve tau|khách sạn|khach san|du lịch|du lich|visa|hộ chiếu|ho chieu|sân bay|san bay|giao thông|giao thong|đường bay|duong bay)\b/i.test(combined)) return true;
-
-  // Tin tức
-  if (/\b(?:tin tức|tin tuc|thời sự|thoi su|bản tin|ban tin|scandal|thiên tai|thien tai|tai nạn|tai nan|sự cố|su co|kết quả|ket qua)\b/i.test(combined)) return true;
-
-  // Câu có ≥ 3 từ và không phải chào hỏi thuần túy -> tìm kiếm an toàn
-  const wordCount = raw.trim().split(/\s+/).length;
-  if (wordCount >= 3) return true;
+  // 8. Từ hỏi thông tin khách quan kết hợp thực thể
+  if (/\b(?:khi nao|bao gio|ngay nao|o dau|bao nhieu|bao lau|ai la|ai doat|ai thang|ai vo dich|lich thi dau|thong tin ve)\b/i.test(unaccented)) {
+    return true;
+  }
 
   return false;
 }
