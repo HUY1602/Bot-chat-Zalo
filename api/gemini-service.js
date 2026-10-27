@@ -8,8 +8,8 @@ if (typeof dns.setDefaultResultOrder === 'function') {
   dns.setDefaultResultOrder('ipv4first');
 }
 
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-1.5-flash', 'gemini-flash-latest', 'gemini-3.5-flash'];
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+const FALLBACK_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash'];
 
 const DEFAULT_SYSTEM_INSTRUCTION = `Bạn tên là "Bọt biển cute" (còn gọi là "Bọt biển nè" hoặc "Bọt biển") — một trợ lý AI nhỏ nhắn, dễ thương, thông minh trong nhóm chat Zalo.
 
@@ -41,6 +41,10 @@ VỀ ẢNH ĐẠI DIỆN & NGOẠI HÌNH:
 VỀ KHẢ NĂNG VẼ TRANH & TẠO ẢNH AI:
 • Bạn có siêu năng lực VẼ TRANH / TẠO ẢNH AI theo yêu cầu của các thành viên trong nhóm!
 • Khi ai đó bảo bạn vẽ hoặc khen bức tranh bạn vẽ ("em vẽ đẹp thế", "tranh đỉnh quá"), hãy cảm ơn thật dễ thương và gợi ý họ có thể nhờ bạn vẽ thêm nhiều tranh khác.
+
+VỀ DỮ LIỆU TÌM KIẾM INTERNET THỜI GIAN THỰC:
+• Khi câu hỏi của người dùng có đính kèm phần "[DỮ LIỆU TÌM KIẾM THỜI GIAN THỰC TỪ INTERNET]", hãy ưu tiên sử dụng các số liệu và thông tin mới nhất đó để giải đáp cho người dùng.
+• Trả lời súc tích, ngọt ngào, duyên dáng, chuẩn xác.
 
 QUY TẮC ĐỘ DÀI & NGẮN GỌN (RẤT QUAN TRỌNG):
 • Ưu tiên trả lời NGẮN GỌN, ĐÚNG TRỌNG TÂM, KHÔNG DÀI DÒNG: Đi thẳng vào vấn đề, không rào đón văn vở, không giải thích vòng vo.
@@ -218,6 +222,28 @@ async function callGeminiRest(model, promptOrContents, apiKey, systemInstruction
 }
 
 /**
+ * Lấy chuỗi thời gian thực tế theo múi giờ Việt Nam (GMT+7)
+ * @returns {string}
+ */
+function getVietnamTimeString() {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric'
+  });
+  const timeStr = now.toLocaleTimeString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  return `${dateStr}, lúc ${timeStr}`;
+}
+
+/**
  * Generate answer from Gemini for a given prompt (with optional conversation history)
  * @param {string} prompt - User question or query
  * @param {object} options - Optional parameters { apiKey, model, systemInstruction, history }
@@ -230,7 +256,12 @@ async function generateAnswer(prompt, options = {}) {
   }
 
   const modelName = options.model || DEFAULT_MODEL;
-  const systemInstruction = options.systemInstruction || process.env.SYSTEM_INSTRUCTION || DEFAULT_SYSTEM_INSTRUCTION;
+  const baseInstruction = options.systemInstruction || process.env.SYSTEM_INSTRUCTION || DEFAULT_SYSTEM_INSTRUCTION;
+
+  // Tự động gắn thời gian thực tế chuẩn xác theo múi giờ Việt Nam (GMT+7)
+  const currentTime = getVietnamTimeString();
+  const timeContext = `\n\nTHỜI GIAN THỰC HIỆN TẠI:\n• Bây giờ là: ${currentTime} (Múi giờ Việt Nam - GMT+7).\n• Bạn luôn nhận thức chuẩn xác về ngày, tháng, năm và giờ phút hiện tại. Tuyệt đối không nói dữ liệu dừng lại ở năm 2024 hay từ chối trả lời về thời gian!`;
+  const systemInstruction = baseInstruction + timeContext;
 
   // Prepare multi-turn contents if history exists
   const contents = prepareContents(prompt, options.history);
@@ -317,6 +348,7 @@ module.exports = {
   generateAnswerWithAction,
   parseGeminiAction,
   formatForZalo,
+  getVietnamTimeString,
   DEFAULT_SYSTEM_INSTRUCTION,
   DEFAULT_MODEL
 };

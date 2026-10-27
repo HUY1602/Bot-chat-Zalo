@@ -6,6 +6,7 @@
 const geminiService = require('./gemini-service');
 const avatarService = require('./avatar-service');
 const imageService = require('./image-service');
+const searchService = require('./search-service');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -37,7 +38,17 @@ module.exports = async function handler(req, res) {
 
   try {
     const startTime = Date.now();
-    const { action } = await geminiService.generateAnswerWithAction(`[Bạn]: ${message}`, {
+
+    // Kiểm tra xem câu hỏi có cần tra cứu Internet thời gian thực không
+    let searchContext = '';
+    if (searchService.shouldSearchWeb(message)) {
+      const searchResults = await searchService.searchWeb(message);
+      if (searchResults && searchResults.length > 0) {
+        searchContext = searchService.buildSearchContext(searchResults);
+      }
+    }
+
+    const { action } = await geminiService.generateAnswerWithAction(`[Bạn]: ${message}${searchContext}`, {
       apiKey: apiKey || process.env.GEMINI_API_KEY,
       model: model || process.env.GEMINI_MODEL
     });

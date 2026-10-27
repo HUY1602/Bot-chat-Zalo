@@ -8,6 +8,7 @@ const geminiService = require('./gemini-service');
 const memoryService = require('./memory-service');
 const avatarService = require('./avatar-service');
 const imageService = require('./image-service');
+const searchService = require('./search-service');
 
 // Cache to prevent duplicate processing from webhook retries
 const processedMessageIds = new Map();
@@ -183,8 +184,20 @@ module.exports = async function handler(req, res) {
     // 4. Lấy lịch sử hội thoại gần nhất của chat này
     const history = await memoryService.getHistory(chatId);
 
+    // 4.5 Kiểm tra xem câu hỏi có cần tra cứu Internet thời gian thực không
+    let searchContext = '';
+    if (searchService.shouldSearchWeb(userQuery)) {
+      console.log(`[WebSearch] Đang tìm kiếm thông tin thời gian thực cho: "${userQuery}"`);
+      const searchResults = await searchService.searchWeb(userQuery);
+      if (searchResults && searchResults.length > 0) {
+        searchContext = searchService.buildSearchContext(searchResults);
+        console.log(`[WebSearch] Đã nạp ${searchResults.length} nguồn tin từ Internet.`);
+      }
+    }
+
     // Gắn tên người gửi rõ ràng theo định dạng [Tên]: Nội dung để AI phân biệt từng người
-    const contextualQuery = `[${senderName}]: ${userQuery}`;
+    const userPrompt = `[${senderName}]: ${userQuery}`;
+    const contextualQuery = `${userPrompt}${searchContext}`;
 
     // 5. Gửi câu hỏi đến Gemini AI để tự động nhận diện ý định (Semantic Intent Routing)
     const { action } = await geminiService.generateAnswerWithAction(contextualQuery, {
@@ -207,7 +220,7 @@ module.exports = async function handler(req, res) {
         await botService.sendMessage(chatId, `${caption}\n\n🔗 ${avatarUrl}`, msgId);
       }
 
-      await memoryService.addTurn(chatId, contextualQuery, caption);
+      await memoryService.addTurn(chatId, userPrompt, caption);
       return res.status(200).json({ ok: true, action: 'sendPhoto' });
     }
 
@@ -222,7 +235,7 @@ module.exports = async function handler(req, res) {
           await botService.sendMessage(chatId, `${caption}\n\n🔗 Bấm vào đây để xem ảnh nét căng: ${imageUrl}`, msgId);
         }
 
-        await memoryService.addTurn(chatId, contextualQuery, caption);
+        await memoryService.addTurn(chatId, userPrompt, caption);
         return res.status(200).json({ ok: true, action: 'generateArtwork' });
       } catch (drawErr) {
         console.error('Lỗi khi tải ảnh vẽ AI:', drawErr);
@@ -232,7 +245,7 @@ module.exports = async function handler(req, res) {
     }
 
     // 7. Trò chuyện thông thường (CHAT)
-    await memoryService.addTurn(chatId, contextualQuery, action.text);
+    await memoryService.addTurn(chatId, userPrompt, action.text);
     await botService.sendMessage(chatId, action.text, msgId);
 
     return res.status(200).json({ ok: true });
