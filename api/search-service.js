@@ -5,52 +5,78 @@
  */
 
 /**
- * Kiểm tra xem câu hỏi của người dùng có cần tra cứu Internet thời gian thực hay không
- * @param {string} text - Tin nhắn của người dùng
+ * Kiểm tra xem câu hỏi có phải là câu hỏi thực tế cần tra cứu Internet không.
+ * Chiến lược: Tìm kiếm HẦU HẾT mọi câu, CHỈ bỏ qua những tin nhắn rõ ràng là chào hỏi / tán gẫu / lệnh bot.
+ * @param {string} text
  * @returns {boolean}
  */
 function shouldSearchWeb(text) {
   if (!text || typeof text !== 'string') return false;
   const raw = text.trim().toLowerCase();
+  if (raw.length < 3) return false;
 
-  // 1. Loại trừ các trường hợp vẽ tranh hoặc xem ảnh hoặc lệnh hệ thống
-  if (/^\/(?:draw|image|ve|paint|art|gen|ping|reset|help|clear)\b/i.test(raw)) {
-    return false;
-  }
-  if (/(?:xem|cho|gửi|show|đổi)?\s*(?:mặt|ảnh|hình|avatar|dung nhan)/i.test(raw)) {
-    return false;
-  }
-  if (/^(?:vẽ|tạo\s+ảnh|phác\s+họa|lên\s+hình)\s+/i.test(raw)) {
+  // --- KHÔNG tìm kiếm: Lệnh hệ thống ---
+  if (/^\/(?:draw|image|ve|paint|art|gen|ping|reset|help|clear|forget|start)\b/i.test(raw)) {
     return false;
   }
 
-  // 2. Loại trừ chào hỏi, tán gẫu xã giao thông thường
-  if (/^(?:chào|hi|hello|ê|alo|bạn\s+là\s+ai|em\s+tên\s+gì|ăn\s+cơm\s+chưa|ngủ\s+chưa|khỏe\s+không)\s*$/i.test(raw)) {
+  // --- KHÔNG tìm kiếm: Yêu cầu xem ảnh/avatar bot ---
+  if (/\b(?:xem|gửi|cho|đổi|show|khoe|nhìn|ngắm)\b.{0,15}\b(?:ảnh|mặt|hình|avatar|dung nhan)\b/i.test(raw) ||
+      /\b(?:ảnh|mặt|hình)\b.{0,10}\b(?:em|bot|bọt biển)\b/i.test(raw)) {
     return false;
   }
 
-  // 3. Các từ khóa chỉ thị rõ ràng cần tìm kiếm / tra cứu
-  const searchKeywords = [
-    // Lệnh tìm kiếm
-    'tìm kiếm', 'tra cứu', 'tra giúp', 'search', 'tra mạng', 'tra google', 'tìm trên mạng', 'cho biết',
-    // Tin tức & sự kiện thời sự
-    'tin tức', 'thời sự', 'bản tin', 'sự kiện', 'scandal', 'bão số', 'thiên tai', 'tai nạn',
-    // Giá cả & thị trường
-    'giá vàng', 'giá xăng', 'giá dầu', 'tỷ giá', 'chứng khoán', 'cổ phiếu', 'lãi suất', 'bitcoin', 'crypto', 'giá usd',
-    // Thời tiết
-    'thời tiết', 'nhiệt độ', 'mưa bão', 'dự báo thời tiết',
-    // Thể thao & Trận đấu
-    'kết quả', 'trận', 'bóng đá', 'bảng xếp hạng', 'tỷ số', 'lịch thi đấu', 'vô địch', 'el clasico', 'clasico', 'derby',
-    'ngoại hạng anh', 'c1', 'world cup', 'euro', 'la liga', 'champions league',
-    // Thời điểm hiện tại / gần đây
-    'hôm nay', 'mới nhất', 'hiện nay', 'vừa xong', 'gần đây', 'dạo này', 'năm 2024', 'năm 2025', 'năm 2026', 'tháng này'
-  ];
+  // --- KHÔNG tìm kiếm: Yêu cầu vẽ tranh AI ---
+  if (/^(?:vẽ|tạo\s+ảnh|phác\s+họa|lên\s+hình)\s+/i.test(raw)) return false;
 
-  for (const kw of searchKeywords) {
-    if (raw.includes(kw)) {
-      return true;
-    }
-  }
+  // --- KHÔNG tìm kiếm: Chào hỏi thuần túy (câu rất ngắn, rõ ràng là xã giao) ---
+  const PURE_SMALLTALK = /^(?:chào|hi+|hello|hey|ê|alo|helo|xin chào|ok|okay|oke|good|nice|được rồi|ừ+|uh+|dạ ok|👋|🙋)\s*[!.]*$/i;
+  if (PURE_SMALLTALK.test(raw)) return false;
+  if (/^(?:chào|hi|hello|ê)\s+(?:em|bot|bọt biển|bọt biển cute)\s*[!.]*$/i.test(raw)) return false;
+
+  // --- KHÔNG tìm kiếm: Hỏi danh tính / khả năng của bot ---
+  if (/^(?:em\s+tên\s+gì|bạn\s+là\s+ai|em\s+là\s+ai|tên\s+em\s+là\s+gì|bot\s+tên\s+gì|em\s+làm\s+được\s+gì|em\s+có\s+thể\s+làm\s+gì)\s*[?!.]*$/i.test(raw)) return false;
+
+  // --- KHÔNG tìm kiếm: Hỏi thăm trạng thái / cảm xúc của bot ---
+  if (/^(?:em|bọt biển)\s+(?:khỏe|vui|ổn|mệt|buồn)\s*(?:không)?\s*[?!.]*$|^(?:khỏe\s+không|ổn\s+không|vui\s+không|ăn\s+cơm\s+chưa|ngủ\s+chưa)\s*[?!.]*$/i.test(raw)) return false;
+
+  // ==========================================================
+  // --- TÌM KIẾM: Mọi câu còn lại có dấu hiệu câu hỏi thực tế ---
+  // ==========================================================
+
+  // Từ hỏi rõ ràng
+  if (/\b(?:khi nào|bao giờ|ngày nào|ở đâu|thế nào|ra sao|bao nhiêu|bao lâu|tại sao|vì sao|ai là|cái gì|điều gì|chuyện gì|lịch|thông tin)\b/i.test(raw)) return true;
+
+  // Thời gian / sự kiện hiện tại
+  if (/\b(?:hôm nay|ngày mai|tuần này|tháng này|năm nay|hiện tại|hiện nay|mới nhất|gần đây|vừa|đang|sắp|sắp tới|sắp ra|ra mắt|phát hành|khởi chiếu|khai mạc)\b/i.test(raw)) return true;
+
+  // Sự kiện giải trí / âm nhạc / phim
+  if (/\b(?:concert|tour|show|festival|lễ hội|buổi diễn|lịch diễn|lịch chiếu|vé|album|ca sĩ|diễn viên|đạo diễn|phim|movie|anime|manga)\b/i.test(raw)) return true;
+
+  // Thể thao
+  if (/\b(?:bóng đá|bóng rổ|tennis|cầu lông|boxing|bơi|olympic|sea games|v.?league|premier league|la liga|serie a|bundesliga|champions league|world cup|euro|trận đấu|tỷ số|bảng xếp hạng|cầu thủ|huấn luyện viên|đội tuyển|vô địch|el clasico|clasico|derby)\b/i.test(raw)) return true;
+
+  // Giá cả / thị trường
+  if (/\b(?:giá|tỷ giá|hối đoái|lãi suất|chứng khoán|cổ phiếu|bitcoin|crypto|vàng|bạc|bất động sản|nhà đất|xăng|dầu)\b/i.test(raw)) return true;
+
+  // Thời tiết
+  if (/\b(?:thời tiết|nhiệt độ|độ ẩm|mưa|nắng|bão|lũ|lụt|áp thấp)\b/i.test(raw)) return true;
+
+  // Công nghệ / sản phẩm
+  if (/\b(?:iphone|samsung|android|ios|windows|macbook|playstation|xbox|app|ứng dụng|game)\b/i.test(raw)) return true;
+
+  // Chính trị / xã hội / y tế
+  if (/\b(?:bầu cử|chính phủ|thủ tướng|tổng thống|quốc hội|luật|vaccine|dịch|virus|bệnh|thuốc|sức khỏe)\b/i.test(raw)) return true;
+
+  // Du lịch / giao thông
+  if (/\b(?:vé máy bay|chuyến bay|vé tàu|khách sạn|du lịch|visa|hộ chiếu|sân bay|giao thông|đường bay)\b/i.test(raw)) return true;
+
+  // Tin tức
+  if (/\b(?:tin tức|thời sự|bản tin|scandal|thiên tai|tai nạn|sự cố|kết quả)\b/i.test(raw)) return true;
+
+  // Câu có ≥ 5 từ và không phải chào hỏi -> tìm kiếm phòng thủ
+  const wordCount = raw.trim().split(/\s+/).length;
+  if (wordCount >= 5) return true;
 
   return false;
 }
@@ -70,7 +96,7 @@ function cleanSearchQuery(text) {
   q = q.replace(/^(?:thế\s+|thế\s+thì\s+|vậy\s+thì\s+|cho\s+(?:anh|em|mình)\s+hỏi\s+|hỏi\s+(?:chút|xíu)\s+)/i, '');
   // Bỏ các từ lệnh ở đầu
   q = q.replace(/^(?:tìm\s+kiếm|tra\s+cứu|tra\s+giúp|search|tra|tìm)\s+(?:cho\s+anh|cho\s+em|giúp\s+mình|hộ\s+anh|về)?\s*/i, '');
-  // Bỏ các từ hỏi ở cuối: "kết quả thế nào", "thế nào", "ra sao", "bao nhiêu", "vậy em", "hả em"
+  // Bỏ các từ hỏi ở cuối
   q = q.replace(/\s+(?:kết\s+quả\s+thế\s+nào|thế\s+nào|ra\s+sao|bao\s+nhiêu|vậy|thế|nào|hả|em|nhé|nha|ạ|với|vậy\s+em|thế\s+em|đi)[\s.?!]*$/i, '');
   q = q.replace(/[\s.?!]+$/, '');
 
