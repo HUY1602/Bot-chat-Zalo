@@ -122,11 +122,3 @@ Nếu bạn muốn kiểm tra cấu hình hoặc chạy thử nghiệm tại má
    Truy cập `http://localhost:3001` trên trình duyệt để kiểm tra thử nghiệm.
 
 ---
-
-## 🔒 Bảo Mật & Lưu Ý Quan Trọng
-
-- **Không chia sẻ file `.env`**: File này chứa các Token và Secret bảo mật, `.gitignore` đã tự động loại trừ nó khỏi git.
-- **Giới hạn tin nhắn Zalo**: Bot đã tích hợp cơ chế tự động chia nhỏ văn bản thông minh đảm bảo không bị lỗi tràn giới hạn 2.000 ký tự của Zalo.
-- **Tránh trùng lặp tin nhắn**: Webhook đã có bộ nhớ đệm chống xử lý trùng (Deduplication Cache) khi Zalo thực hiện cơ chế gửi lại (retry event).
-
-Chúc bạn có một chú bot AI phục vụ nhóm Zalo thật hữu ích và mượt mà!
