@@ -110,7 +110,7 @@ function cleanSearchQuery(text) {
  * @returns {Promise<Array<{ title: string, snippet: string }>>}
  */
 async function searchSerpApi(cleanQ, apiKey) {
-  const url = `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(cleanQ)}&api_key=${apiKey}&hl=vi&gl=vn&num=5`;
+  const url = `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(cleanQ)}&api_key=${apiKey}&hl=vi&gl=vn&num=8`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
@@ -126,7 +126,50 @@ async function searchSerpApi(cleanQ, apiKey) {
   const data = await res.json();
   const results = [];
 
-  // 1. Trích xuất Sports Results (kết quả thể thao, trận đấu, tỷ số)
+  // 1. Trích xuất Top Stories (Tin tức nóng, sự kiện vừa diễn ra, tin mới trong vài phút/giờ qua)
+  if (Array.isArray(data.top_stories) && data.top_stories.length > 0) {
+    for (const story of data.top_stories.slice(0, 4)) {
+      const timeStr = story.date ? `(${story.date}) ` : '';
+      const sourceStr = story.source ? `[${story.source}] ` : '';
+      results.push({
+        title: `${sourceStr}Tin mới nhất: ${story.title}`,
+        snippet: `${timeStr}${story.title}`
+      });
+    }
+  }
+
+  // 2. Trích xuất Google AI Overview (Tổng hợp sự kiện thời gian thực siêu chuẩn xác từ Google)
+  if (data.ai_overview && Array.isArray(data.ai_overview.text_blocks)) {
+    const aiTexts = [];
+    for (const b of data.ai_overview.text_blocks) {
+      if (b.snippet) aiTexts.push(b.snippet);
+      if (Array.isArray(b.list)) {
+        for (const li of b.list) {
+          if (li.snippet) aiTexts.push(`• ${li.snippet}`);
+        }
+      }
+    }
+    if (aiTexts.length > 0) {
+      results.push({
+        title: 'Google Tổng hợp thời gian thực',
+        snippet: aiTexts.slice(0, 5).join('\n')
+      });
+    }
+  }
+
+  // 3. Trích xuất Answer Box (hộp câu trả lời trực tiếp của Google)
+  if (data.answer_box) {
+    const ab = data.answer_box;
+    const answer = ab.answer || ab.snippet || ab.result || (Array.isArray(ab.snippet_highlighted_words) ? ab.snippet_highlighted_words.join(' ') : '');
+    if (answer) {
+      results.push({
+        title: ab.title || 'Câu trả lời trực tiếp từ Google',
+        snippet: answer.trim()
+      });
+    }
+  }
+
+  // 4. Trích xuất Sports Results (kết quả thể thao, trận đấu, tỷ số)
   if (data.sports_results) {
     const sr = data.sports_results;
     let sportsText = '';
@@ -145,19 +188,19 @@ async function searchSerpApi(cleanQ, apiKey) {
     }
   }
 
-  // 2. Trích xuất Answer Box (hộp câu trả lời trực tiếp của Google)
-  if (data.answer_box) {
-    const ab = data.answer_box;
-    const answer = ab.answer || ab.snippet || ab.result || (Array.isArray(ab.snippet_highlighted_words) ? ab.snippet_highlighted_words.join(' ') : '');
-    if (answer) {
+  // 5. Trích xuất News Results (kết quả tin tức nếu có)
+  if (Array.isArray(data.news_results) && data.news_results.length > 0) {
+    for (const item of data.news_results.slice(0, 3)) {
+      const dateStr = item.date ? `(${item.date}) ` : '';
+      const sourceStr = item.source ? `[${item.source}] ` : '';
       results.push({
-        title: ab.title || 'Câu trả lời trực tiếp từ Google',
-        snippet: answer.trim()
+        title: `${sourceStr}${item.title || ''}`,
+        snippet: `${dateStr}${item.snippet || item.title || ''}`
       });
     }
   }
 
-  // 3. Trích xuất Knowledge Graph
+  // 6. Trích xuất Knowledge Graph
   if (data.knowledge_graph && (data.knowledge_graph.description || data.knowledge_graph.title)) {
     const kg = data.knowledge_graph;
     const text = [kg.title, kg.type, kg.description].filter(Boolean).join(' - ');
@@ -169,13 +212,14 @@ async function searchSerpApi(cleanQ, apiKey) {
     }
   }
 
-  // 4. Trích xuất Organic Results
+  // 7. Trích xuất Organic Results (kèm thời gian đăng bài để phân biệt tin cũ / mới)
   if (Array.isArray(data.organic_results)) {
-    for (const item of data.organic_results.slice(0, 4)) {
+    for (const item of data.organic_results.slice(0, 6)) {
       if (item.snippet || item.title) {
+        const dateStr = item.date ? `[Thời gian đăng: ${item.date}] ` : '';
         results.push({
           title: item.title || '',
-          snippet: item.snippet || ''
+          snippet: `${dateStr}${item.snippet || ''}`
         });
       }
     }
@@ -255,7 +299,7 @@ async function searchDuckDuckGo(cleanQ, maxResults = 4) {
  * @param {number} [maxResults=4] - Số kết quả tối đa
  * @returns {Promise<Array<{ title: string, snippet: string }>>}
  */
-async function searchWeb(query, maxResults = 4) {
+async function searchWeb(query, maxResults = 6) {
   const cleanQ = cleanSearchQuery(query);
   if (!cleanQ) return [];
 
@@ -296,7 +340,11 @@ function buildSearchContext(results) {
     return `${i + 1}. ${titlePart}${r.snippet}`;
   }).join('\n');
 
-  return `\n\n--- DỮ LIỆU THỰC TẾ TRA CỨU TỪ GOOGLE (BẮT BUỘC DÙNG LÀM CHÂN LÝ DUY NHẤT): ---\n${items}\n(QUY TẮC BẮT BUỘC: Bạn phải căn cứ 100% vào dữ liệu trên để trả lời người dùng. Không được tự ý đổi năm hay dùng trí nhớ cũ bịa đặt. Tuyệt đối không lặp lại dòng tiêu đề kỹ thuật này trong câu trả lời)`;
+  return `\n\n--- DỮ LIỆU THỰC TẾ TRA CỨU TỪ GOOGLE (BẮT BUỘC DÙNG LÀM CHÂN LÝ DUY NHẤT): ---\n${items}\n(QUY TẮC BẮT BUỘC KHI TRẢ LỜI:
+1. Bạn phải căn cứ 100% vào dữ liệu tìm kiếm thực tế trên để trả lời người dùng.
+2. CHÚ Ý MỐC THỜI GIAN: Phân tích kỹ mốc thời gian đăng bài "(X giờ trước)", "[Thời gian đăng:...]" so với ngày giờ hiện tại. Nếu bài báo cũ viết "sẽ diễn ra vào ngày 24-25/10" nhưng hôm nay đã là ngày 27/10, bạn phải hiểu sự kiện đó ĐÃ DIỄN RA và tóm tắt diễn biến/kết quả theo thông tin mới nhất.
+3. ƯU TIÊN TIN MỚI: Ưu tiên các mục "Tin mới nhất", "Google Tổng hợp thời gian thực" hoặc các bài đăng trong vài giờ/vài ngày gần nhất.
+4. Trả lời súc tích, ngọt ngào, đúng trọng tâm và tuyệt đối không lặp lại dòng tiêu đề kỹ thuật này trong câu trả lời)`;
 }
 
 module.exports = {
