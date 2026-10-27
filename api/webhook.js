@@ -143,54 +143,18 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // 2.5 Yêu cầu xem mặt / hình / ảnh / avatar của Bot
-    if (avatarService.isBotPhotoRequest(userQuery)) {
-      const isOther = avatarService.isOtherPhotoRequest(userQuery);
-      const avatarUrl = avatarService.getBotAvatarUrl(req);
-      const caption = avatarService.getAvatarCaption(senderName, isOther);
-      console.log(`[Avatar Request] Gửi ảnh đại diện cho ${senderName} (${chatId}): ${avatarUrl} (isOther: ${isOther})`);
-
-      try {
-        const sendResult = await botService.sendPhoto(chatId, avatarUrl, caption, msgId);
-        console.log('Kết quả sendPhoto:', JSON.stringify(sendResult));
-
-        // Nếu Zalo Bot API trả về ok=false, fallback gửi bằng sendMessage
-        if (sendResult && sendResult.ok === false) {
-          console.warn('sendPhoto trả về ok=false, fallback sang sendMessage:', sendResult.description || sendResult.error);
-          await botService.sendMessage(chatId, `${caption}\n\n🔗 ${avatarUrl}`, msgId);
-        }
-      } catch (photoErr) {
-        console.error('Lỗi khi gọi sendPhoto:', photoErr.message);
-        // Fallback gửi qua sendMessage
-        await botService.sendMessage(chatId, `${caption}\n\n🔗 ${avatarUrl}`, msgId);
-      }
-
-      // Lưu tương tác vào bộ nhớ hội thoại để AI hiểu ngữ cảnh các câu sau
-      await memoryService.addTurn(
-        chatId,
-        `[${senderName}]: ${userQuery}`,
-        `[Em đã gửi ảnh đại diện của mình cho ${senderName} xem kèm lời nhắn: "${caption}"]`
-      );
-
-      return res.status(200).json({ ok: true, action: 'sendPhoto' });
-    }
-
-    // 2.6 Yêu cầu vẽ tranh / tạo ảnh AI
-    if (imageService.isDrawRequest(userQuery)) {
-      console.log(`[Image Request] ${senderName} yêu cầu vẽ tranh: "${userQuery}"`);
+    // 2.5 Fast-path: Lệnh trực tiếp /draw hoặc /ve (không cần qua AI phân tích ý định)
+    if (/^\/(?:draw|image|ve|paint|art|gen)\s+/i.test(userQuery)) {
+      console.log(`[Fast-path Draw] ${senderName} yêu cầu vẽ tranh: "${userQuery}"`);
       try {
         const { imageUrl, rawPrompt, caption } = await imageService.generateArtwork(userQuery, senderName);
         console.log(`[Image Generated] URL: ${imageUrl}`);
 
         const sendResult = await botService.sendPhoto(chatId, imageUrl, caption, msgId);
-        console.log('Kết quả sendPhoto tạo ảnh:', JSON.stringify(sendResult));
-
         if (sendResult && sendResult.ok === false) {
-          console.warn('sendPhoto tạo ảnh trả về ok=false, fallback sang sendMessage:', sendResult.description || sendResult.error);
           await botService.sendMessage(chatId, `${caption}\n\n🔗 Bấm vào đây để xem ảnh nét căng: ${imageUrl}`, msgId);
         }
 
-        // Lưu vào bộ nhớ hội thoại
         await memoryService.addTurn(
           chatId,
           `[${senderName}]: ${userQuery}`,
@@ -222,20 +186,69 @@ module.exports = async function handler(req, res) {
     // Gắn tên người gửi rõ ràng theo định dạng [Tên]: Nội dung để AI phân biệt từng người
     const contextualQuery = `[${senderName}]: ${userQuery}`;
 
-    // 5. Gửi câu hỏi đến Gemini AI kèm lịch sử
-    const aiAnswer = await geminiService.generateAnswer(contextualQuery, {
+    // 5. Gửi câu hỏi đến Gemini AI để tự động nhận diện ý định (Semantic Intent Routing)
+    const { action } = await geminiService.generateAnswerWithAction(contextualQuery, {
       history
     });
 
-    // 6. Lưu câu hỏi và câu trả lời vào bộ nhớ
-    await memoryService.addTurn(chatId, contextualQuery, aiAnswer);
+    // 6. Xử lý các hành động ngữ nghĩa do Gemini quyết định
+    if (action.type === 'SEND_AVATAR') {
+      const avatarUrl = avatarService.getBotAvatarUrl(req);
+      const caption = action.text || avatarService.getAvatarCaption(senderName, action.isOther);
+      console.log(`[Semantic Action: SEND_AVATAR] Gửi ảnh cho ${senderName} (${chatId}): ${avatarUrl} (isOther: ${action.isOther})`);
 
-    // 7. Gửi câu trả lời về cho nhóm hoặc chat 1-1
-    await botService.sendMessage(chatId, aiAnswer, msgId);
+      try {
+        const sendResult = await botService.sendPhoto(chatId, avatarUrl, caption, msgId);
+        if (sendResult && sendResult.ok === false) {
+          await botService.sendMessage(chatId, `${caption}\n\n🔗 ${avatarUrl}`, msgId);
+        }
+      } catch (photoErr) {
+        console.error('Lỗi khi gọi sendPhoto:', photoErr.message);
+        await botService.sendMessage(chatId, `${caption}\n\n🔗 ${avatarUrl}`, msgId);
+      }
+
+      await memoryService.addTurn(chatId, contextualQuery, caption);
+      return res.status(200).json({ ok: true, action: 'sendPhoto' });
+    }
+
+    if (action.type === 'GENERATE_IMAGE') {
+      console.log(`[Semantic Action: GENERATE_IMAGE] Prompt: "${action.imagePrompt}"`);
+      try {
+        const imageUrl = imageService.buildImageUrl(action.imagePrompt);
+        const caption = action.text || `Dạ tranh của ${senderName} đây nè! 🎨✨\n🫧 Bọt biển vẽ cho ${senderName} có đẹp không nè? 🥰`;
+
+        const sendResult = await botService.sendPhoto(chatId, imageUrl, caption, msgId);
+        if (sendResult && sendResult.ok === false) {
+          await botService.sendMessage(chatId, `${caption}\n\n🔗 Bấm vào đây để xem ảnh nét căng: ${imageUrl}`, msgId);
+        }
+
+        await memoryService.addTurn(chatId, contextualQuery, caption);
+        return res.status(200).json({ ok: true, action: 'generateArtwork' });
+      } catch (drawErr) {
+        console.error('Lỗi khi tải ảnh vẽ AI:', drawErr);
+        await botService.sendMessage(chatId, `${action.text}\n\n(Ui, em gặp chút trục trặc khi tải ảnh: ${drawErr.message} 🥺)`, msgId);
+        return res.status(200).json({ ok: false, error: drawErr.message });
+      }
+    }
+
+    // 7. Trò chuyện thông thường (CHAT)
+    await memoryService.addTurn(chatId, contextualQuery, action.text);
+    await botService.sendMessage(chatId, action.text, msgId);
 
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error('Lỗi khi xử lý tin nhắn:', err);
+
+    // Fallback thông minh: Nếu Gemini lỗi nhưng người dùng đang hỏi ảnh đại diện theo regex thì vẫn phục vụ ảnh!
+    if (avatarService.isBotPhotoRequest(userQuery)) {
+      try {
+        const isOther = avatarService.isOtherPhotoRequest(userQuery);
+        const avatarUrl = avatarService.getBotAvatarUrl(req);
+        const caption = avatarService.getAvatarCaption(senderName, isOther);
+        await botService.sendPhoto(chatId, avatarUrl, caption, msgId);
+        return res.status(200).json({ ok: true, fallback: 'avatar' });
+      } catch (fErr) {}
+    }
 
     // Thông báo lỗi thân thiện cho người dùng nếu xảy ra sự cố
     try {

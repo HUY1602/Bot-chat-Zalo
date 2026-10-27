@@ -8,8 +8,8 @@ if (typeof dns.setDefaultResultOrder === 'function') {
   dns.setDefaultResultOrder('ipv4first');
 }
 
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
-const FALLBACK_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-flash-latest'];
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-1.5-flash', 'gemini-flash-latest', 'gemini-3.5-flash'];
 
 const DEFAULT_SYSTEM_INSTRUCTION = `Bạn tên là "Bọt biển cute" (còn gọi là "Bọt biển nè" hoặc "Bọt biển") — một trợ lý AI nhỏ nhắn, dễ thương, thông minh trong nhóm chat Zalo.
 
@@ -53,6 +53,34 @@ QUY TẮC ĐỘ DÀI & NGẮN GỌN (RẤT QUAN TRỌNG):
   - Tóm lược ngay câu trả lời cốt lõi trong 1-2 câu đầu.
   - Nếu cần liệt kê, chỉ nêu 2-4 ý chính ngắn gọn bằng dấu •. Tránh viết cả bài luận dài.
 • KHÔNG lặp lại câu từ, không chèn các câu kết khuôn mẫu thừa thãi ("Nếu anh cần gì cứ hỏi em nha...") nếu không cần thiết.
+
+QUY TẮC XỬ LÝ Ý ĐỊNH VÀ THẺ HÀNH ĐỘNG (ACTION TAGS):
+Mặc định mọi tin nhắn là TRÒ CHUYỆN BÌNH THƯỜNG.
+Khi người dùng chào hỏi ("chào em", "hello"), hỏi thăm ("hôm nay thế nào", "khỏe không"), tán gẫu, hỏi kiến thức, cảm ơn, khen ngợi:
+-> TUYỆT ĐỐI KHÔNG chèn bất kỳ thẻ hành động nào! Trả lời bình thường, dễ thương.
+
+Bạn CHỈ chèn thẻ hành động khi và chỉ khi TIN NHẮN MỚI NHẤT của người dùng rơi vào 2 trường hợp cụ thể:
+
+1. YÊU CẦU XEM MẶT / ẢNH CỦA BẠN:
+   - Dấu hiệu: Bất kỳ câu nào người dùng muốn xem mặt, xem hình, xem ảnh, dung nhan, diện mạo của bạn, hoặc xin ảnh khác (ví dụ: "cho a xem ảnh", "mặt em đâu", "ảnh khác xem nào", "show hình bé", "cho xin ảnh nữa", "cho a xem bản mặt", "đổi kiểu khác",...).
+   - Đặt thẻ ở ĐẦU câu:
+     • Nếu họ xin "ảnh khác", "tấm khác", "đổi kiểu khác", "ảnh nữa": [[ACTION:SEND_AVATAR_OTHER]]
+     • Nếu họ xem ảnh bình thường lần đầu: [[ACTION:SEND_AVATAR]]
+   - Kèm theo lời nhắn ngọt ngào của bạn sau thẻ. Ví dụ:
+     "[[ACTION:SEND_AVATAR_OTHER]] Dạ đây là hình khác của em nè anh Huy ơi! 🫧 Em đổi tấm khác cho anh ngắm nè 🥰"
+   - TUYỆT ĐỐI KHÔNG BAO GIỜ nói "em chỉ có một ảnh" hay từ chối gửi ảnh!
+
+2. YÊU CẦU VẼ TRANH / TẠO ẢNH / PHÁC HỌA NGHỆ THUẬT:
+   - Dấu hiệu: Người dùng muốn bạn vẽ tranh, tạo ảnh, phác họa, render, làm hình ảnh nghệ thuật (ví dụ: "vẽ cho anh...", "phác họa giúp...", "lên hình chú mèo", "render...", "tạo ảnh hoàng hôn", "làm một bức tranh...").
+   - LƯU Ý: KHÔNG áp dụng cho câu hỏi kiến thức, vẽ biểu đồ excel, vẽ sơ đồ tư duy, vẽ mạch điện. Chỉ áp dụng cho tranh vẽ hình ảnh nghệ thuật.
+   - Đặt thẻ ở ĐẦU câu:
+     [[ACTION:GENERATE_IMAGE: English text-to-image prompt with vivid artistic details, cinematic lighting, 8k resolution]]
+   - Kèm theo lời nhắn dễ thương của bạn sau thẻ. Ví dụ:
+     "[[ACTION:GENERATE_IMAGE: A cute fluffy kitten astronaut floating in deep space, glowing nebulae, cinematic lighting, 8k resolution]] Dạ Bọt biển đang vẽ tranh cho anh nè! 🎨 Anh đợi em xíu nghen 🫧"
+
+LƯU Ý ĐẶC BIỆT KHI CÓ LỊCH SỬ CHAT:
+- Phân tích ý định CHỈ DỰA TRÊN TIN NHẮN MỚI NHẤT HIỆN TẠI của người dùng.
+- Tuyệt đối không mang thẻ hành động từ các câu nói cũ trong quá khứ sang câu nói hiện tại!
 
 QUY TẮC ĐỊNH DẠNG ZALO (TUYỆT ĐỐI KHÔNG DÙNG DẤU SAO **):
 • TUYỆT ĐỐI KHÔNG dùng dấu sao ** (in đậm), * (in nghiêng), ### (tiêu đề). Zalo không hỗ trợ markdown.
@@ -228,8 +256,66 @@ async function generateAnswer(prompt, options = {}) {
   }
 }
 
+/**
+ * Phân tích thẻ hành động ngữ nghĩa từ kết quả phản hồi của Gemini
+ * @param {string} rawText 
+ * @returns {{ type: 'SEND_AVATAR'|'GENERATE_IMAGE'|'CHAT', isOther: boolean, imagePrompt: string, text: string }}
+ */
+function parseGeminiAction(rawText) {
+  if (!rawText) return { type: 'CHAT', text: '', isOther: false, imagePrompt: '' };
+
+  let text = String(rawText).trim();
+
+  // 1. Kiểm tra ACTION:SEND_AVATAR hoặc ACTION:SEND_AVATAR_OTHER (chấp nhận cả có hoặc không có dấu gạch dưới, khoảng trắng, 1 hoặc 2 ngoặc vuông)
+  const avatarMatch = text.match(/\[{1,2}ACTION:\s*SEND[_\s]*AVATAR(?:[_\s]*(OTHER))?\]{1,2}/i);
+  if (avatarMatch) {
+    const isOther = Boolean(avatarMatch[1]);
+    const cleanText = text.replace(/\[{1,2}ACTION:[^\]]+\]{1,2}\s*/g, '').trim();
+    return {
+      type: 'SEND_AVATAR',
+      isOther,
+      imagePrompt: '',
+      text: formatForZalo(cleanText)
+    };
+  }
+
+  // 2. Kiểm tra ACTION:GENERATE_IMAGE: <prompt>
+  const imageMatch = text.match(/\[{1,2}ACTION:\s*GENERATE[_\s]*IMAGE:\s*([^\]]+)\]{1,2}/i);
+  if (imageMatch) {
+    const imagePrompt = imageMatch[1].trim();
+    const cleanText = text.replace(/\[{1,2}ACTION:[^\]]+\]{1,2}\s*/g, '').trim();
+    return {
+      type: 'GENERATE_IMAGE',
+      isOther: false,
+      imagePrompt,
+      text: formatForZalo(cleanText)
+    };
+  }
+
+  return {
+    type: 'CHAT',
+    isOther: false,
+    imagePrompt: '',
+    text: formatForZalo(text)
+  };
+}
+
+/**
+ * Gọi Gemini và tự động phân tích ý định hành động (Semantic Intent)
+ * @param {string} prompt 
+ * @param {object} options 
+ * @returns {Promise<{ action: object, rawAnswer: string }>}
+ */
+async function generateAnswerWithAction(prompt, options = {}) {
+  const rawAnswer = await generateAnswer(prompt, options);
+  const action = parseGeminiAction(rawAnswer);
+  return { action, rawAnswer };
+}
+
 module.exports = {
   generateAnswer,
+  generateAnswerWithAction,
+  parseGeminiAction,
   formatForZalo,
   DEFAULT_SYSTEM_INSTRUCTION,
   DEFAULT_MODEL
