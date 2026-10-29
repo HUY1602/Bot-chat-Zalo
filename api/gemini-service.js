@@ -376,7 +376,58 @@ async function generateAnswerWithAction(prompt, options = {}) {
   return { action, rawAnswer };
 }
 
+
+/**
+ * Tóm tắt đoạn hội thoại các tin nhắn gần nhất trong nhóm
+ * @param {Array<{role: string, parts: Array<{text: string}>}>} messages - Danh sách tin nhắn
+ * @param {string} requesterName - Tên người yêu cầu tóm tắt
+ * @param {object} [options] - Tuỳ chọn { apiKey, model }
+ * @returns {Promise<string>}
+ */
+async function summarizeConversation(messages = [], requesterName = 'bạn', options = {}) {
+  if (!messages || messages.length === 0) {
+    return `Dạ hiện tại em chưa ghi nhận tin nhắn nào trong nhóm mình nè ${requesterName} ơi! 🫧`;
+  }
+
+  const transcriptLines = messages.map((msg, idx) => {
+    const rawText = msg.parts?.[0]?.text || '';
+    const line = msg.role === 'model'
+      ? (rawText.startsWith('[') ? rawText : `[Bọt biển cute]: ${rawText}`)
+      : rawText;
+    return `${idx + 1}. ${line}`;
+  }).join('\n');
+
+  const summarySystemInstruction = `Bạn tên là "Bọt biển cute" (hoặc "Bọt biển") — trợ lý AI nhỏ nhắn, dễ thương, thông minh trong nhóm chat Zalo.
+
+NHIỆM VỤ CỦA BẠN:
+Tóm tắt lại nội dung đoạn hội thoại gần nhất của các thành viên trong nhóm một cách súc tích, mạch lạc, chính xác và đầy đủ các ý thảo luận quan trọng.
+
+QUY TẮC BẮT BUỘC:
+• Tự xưng là "em", gọi người yêu cầu là "${requesterName}" (hoặc anh/chị ${requesterName} phù hợp theo ngữ cảnh).
+• Giữ phong cách ngọt ngào, lễ phép, gần gũi, dùng các emoji xinh xắn (📝, 📌, 💡, 🫧, ✨, 🌸).
+• TUYỆT ĐỐI KHÔNG chèn bất kỳ thẻ hành động nào như [[ACTION:...]] hay tự ý vẽ tranh / gửi ảnh. Nhiệm vụ duy nhất ở đây là tóm tắt văn bản.
+• ĐỊNH DẠNG ZALO (TUYỆT ĐỐI KHÔNG DÙNG MARKDOWN IN ĐẬM **):
+  - TUYỆT ĐỐI KHÔNG dùng dấu sao ** (in đậm), * (in nghiêng), ### (tiêu đề).
+  - Dùng dấu chấm tròn (•), số (1., 2.), hoặc icon (📌, 💡) để phân tách các ý.
+• CẤU TRÚC BẢN TÓM TẮT:
+  - Lời chào ngắn gọn mở đầu gửi tới ${requesterName}.
+  - 📌 Các chủ đề trao đổi chính: Nêu 2 đến 4 ý súc tích về những gì các thành viên đã nói, ai đề cập việc gì, các câu hỏi/thắc mắc đã được giải đáp.
+  - 💡 Điểm thống nhất / Đáng lưu ý (nếu có): Các lịch hẹn, nhắc việc, quyết định chung hoặc thông tin quan trọng.
+  - Lời kết dễ thương, sẵn sàng hỗ trợ tiếp.`;
+
+  const prompt = `Dưới đây là nội dung ${messages.length} tin nhắn gần nhất diễn ra trong nhóm Zalo:\n\n${transcriptLines}\n\nHãy tóm tắt lại súc tích và chuẩn xác cho ${requesterName} theo đúng phong cách Bọt biển cute.`;
+
+  const summaryText = await generateAnswer(prompt, {
+    apiKey: options.apiKey,
+    model: options.model,
+    systemInstruction: summarySystemInstruction
+  });
+
+  return formatForZalo(summaryText);
+}
+
 module.exports = {
+  summarizeConversation,
   generateAnswer,
   generateAnswerWithAction,
   parseGeminiAction,

@@ -52,6 +52,46 @@ function cleanMention(rawText) {
   return cleaned.trim();
 }
 
+
+/**
+ * Kiểm tra xem người dùng có đang yêu cầu tóm tắt cuộc trò chuyện không
+ * @param {string} rawText 
+ * @returns {boolean}
+ */
+function isSummaryRequest(rawText) {
+  if (!rawText) return false;
+  const clean = rawText.trim().toLowerCase();
+
+  // 1. Lệnh trực tiếp
+  if (/^\/(?:tomtat|summary|recap|brief)\b/i.test(clean)) return true;
+
+  // 2. Không kích hoạt nếu đang yêu cầu tóm tắt tài liệu, bài viết, đoạn văn bên ngoài
+  if (/(?:đoạn văn|văn bản|bài viết|bài báo|cuốn sách|truyện|bài thơ|link|nội dung sau|dưới đây)/i.test(clean)) {
+    return false;
+  }
+
+  // 3. Mẫu câu tóm tắt cuộc trò chuyện / nhóm / tin nhắn
+  if (/\b(?:tóm tắt|recap)\b.*?(?:cuộc trò chuyện|hội thoại|tin nhắn|đoạn chat|gần đây|nhóm|vừa rồi|nội dung|20 tin|lại)/i.test(clean)) {
+    return true;
+  }
+
+  // 4. Mẫu câu ngắn: "tóm tắt", "tóm tắt giúp anh", "tóm tắt nha em", "tóm tắt đi", "tóm tắt hộ em"
+  if (/^(?:hãy\s+)?(?:tóm tắt|recap)(?:\s+(?:giúp|hộ|cho|nha|nhé|nè|đi))?(?:\s+(?:anh|chị|em|bot|bọt biển))?$/i.test(clean)) {
+    return true;
+  }
+
+  // 5. Câu hỏi tình hình nhóm: "nãy giờ mọi người nói gì thế", "vừa nói gì thế", "có chuyện gì vừa xảy ra"
+  if (/(?:nãy giờ|vừa rồi)\s+(?:nhóm|mọi người|mng|các bạn)\s+(?:nói|bàn|trò chuyện)\s+gì/i.test(clean)) {
+    return true;
+  }
+
+  if (/(?:có chuyện gì|vừa xảy ra chuyện gì)\s+(?:thế|vậy|hả)/i.test(clean)) {
+    return true;
+  }
+
+  return false;
+}
+
 module.exports = async function handler(req, res) {
   // Allow health check via GET
   if (req.method === 'GET') {
@@ -138,7 +178,8 @@ module.exports = async function handler(req, res) {
 
     // 1. Built-in command: /start hoặc /help
     if (userQuery === '/start' || userQuery === '/help' || userQuery === '!help') {
-      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh/chị cần gì cứ hỏi em nha!\n\n📌 Các tính năng của em:\n• Hỏi đáp thông minh: Gõ @tên_bot kèm câu hỏi hoặc Reply tin nhắn của em\n• ⏰ Hẹn giờ & Nhắc việc: "nhắc anh 10 phút nữa uống nước", "nhắc em mai 8h sáng nộp báo cáo", /reminders, /huynhac\n• 🎨 Vẽ tranh AI: Gõ "vẽ + mô tả" (ví dụ: vẽ chú mèo phi hành gia) hoặc "/draw ..."\n• 📸 Xem ảnh của em: Gõ "cho xem ảnh bot", "xem mặt bot"\n• /ping: Kiểm tra bot còn hoạt động không\n• /reset: Làm mới bộ nhớ trò chuyện\n• /help: Xem lại hướng dẫn này`;
+      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh/chị cần gì cứ hỏi em nha!\n\n📌 Các tính năng của em:\n• Hỏi đáp thông minh: Gõ @tên_bot kèm câu hỏi hoặc Reply tin nhắn của em\n• ⏰ Hẹn giờ & Nhắc việc: "nhắc anh 10 phút nữa uống nước", "nhắc em mai 8h sáng nộp báo cáo", /reminders, /huynhac\n• 📝 Tóm tắt hội thoại: "tóm tắt cuộc trò chuyện", "tóm tắt 20 tin nhắn gần nhất", /tomtat, /summary
+• 🎨 Vẽ tranh AI: Gõ "vẽ + mô tả" (ví dụ: vẽ chú mèo phi hành gia) hoặc "/draw ..."\n• 📸 Xem ảnh của em: Gõ "cho xem ảnh bot", "xem mặt bot"\n• /ping: Kiểm tra bot còn hoạt động không\n• /reset: Làm mới bộ nhớ trò chuyện\n• /help: Xem lại hướng dẫn này`;
       await botService.sendMessage(chatId, helpText, msgId);
       return res.status(200).json({ ok: true });
     }
@@ -256,6 +297,35 @@ module.exports = async function handler(req, res) {
         );
         return res.status(200).json({ ok: false, error: drawErr.message });
       }
+    }
+
+
+    // 2.7 Tóm tắt cuộc trò chuyện (20 tin nhắn gần nhất): /tomtat, /summary, /recap hoặc ngôn ngữ tự nhiên
+    if (isSummaryRequest(userQuery)) {
+      console.log(`[Summary Request] Từ ${senderName}: "${userQuery}"`);
+      const countMatch = userQuery.match(/(\d+)\s*(?:tin|tin nhắn|câu)/i);
+      const count = countMatch ? Math.min(Math.max(parseInt(countMatch[1], 10), 5), 50) : 20;
+
+      const history = await memoryService.getHistory(chatId);
+      if (!history || history.length < 2) {
+        const noHistoryText = `Dạ hiện tại nhóm mình chưa có đủ tin nhắn trò chuyện để em tóm tắt nè ${senderName} ơi! 🫧 Mọi người cùng trò chuyện thêm chút nữa rồi gọi em tóm tắt nha 🥰`;
+        await botService.sendMessage(chatId, noHistoryText, msgId);
+        return res.status(200).json({ ok: true, action: 'summaryEmpty' });
+      }
+
+      const recentMessages = history.slice(-count);
+      const summaryText = await geminiService.summarizeConversation(recentMessages, senderName);
+
+      await botService.sendMessage(chatId, summaryText, msgId);
+
+      // Lưu vào bộ nhớ ngữ cảnh hội thoại
+      await memoryService.addTurn(
+        chatId,
+        `[${senderName}]: ${userQuery}`,
+        summaryText
+      );
+
+      return res.status(200).json({ ok: true, action: 'summarizeConversation', count: recentMessages.length });
     }
 
     // 3. Nếu người dùng chỉ tag bot mà không hỏi gì
