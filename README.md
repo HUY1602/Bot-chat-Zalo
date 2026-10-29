@@ -8,17 +8,20 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 
 - **Chạy 24/7 Miễn Phí Trên Vercel**: Sử dụng Vercel Serverless Function, tự động scale, không tốn chi phí server hay VPS.
 - **Tích hợp Google Gemini 2.5 Flash / 3.5 Flash**: Phản hồi siêu nhanh (500ms - 1.5s), thông minh, xử lý đa lĩnh vực bằng tiếng Việt tự nhiên.
+- **Trí Nhớ Hội Thoại 24/7 Bền Bỉ (Upstash Redis)**: Lưu trữ lịch sử chat nhiều lượt (multi-turn), ghi nhớ ngữ cảnh riêng biệt cho từng thành viên trong nhóm, không bị mất dữ liệu khi serverless function ngủ đông.
+- **Nhận Thức Thời Gian Thực Tuyệt Đối (Real-Time Context Anchor)**: Tự động neo mốc thời gian thực tế chuẩn múi giờ Việt Nam (GMT+7) vào từng lượt câu hỏi, loại bỏ hoàn toàn lỗi mô hình AI bị "neo tư duy" theo các mốc ngày cũ trong lịch sử trò chuyện.
+- **Tra Cứu Google Thời Gian Thực (SerpApi Web Search)**: Tự động phân tích câu hỏi để tra cứu thông tin thời sự, kết quả bóng đá, sự kiện nóng mới nhất trên Google và đối chiếu mốc thời gian thực tế.
 - **Hẹn Giờ & Nhắc Việc Thông Minh (Reminders & Scheduler)**: Nhận diện ngôn ngữ tự nhiên tiếng Việt chuẩn xác (`nhắc anh 10 phút nữa...`, `nhắc em mai 8h sáng...`, `/remind 15:30 họp phòng ban`). Hỗ trợ hàng đợi thời gian thực trên **Upstash Redis Delay Queue**, tự động réo chuông thông báo đúng giờ qua **Vercel Cron** (`/api/reminder-cron`). Có lệnh xem danh sách (`/reminders`) và hủy nhắc hẹn (`/huynhac`).
 - **Tạo Ảnh & Vẽ Tranh AI (Text-to-Image)**: Tự động nhận diện yêu cầu vẽ tranh tiếng Việt (`vẽ...` hoặc `/draw...`), tối ưu hóa prompt qua Gemini và tạo tác phẩm nghệ thuật 8K sắc nét (mô hình Flux) gửi trực tiếp vào nhóm Zalo.
-- **Gửi Ảnh Đại Diện Tự Động**: Khi thành viên yêu cầu xem mặt / xem hình / xem ảnh của bot, bot sẽ gửi ngay ảnh đại diện kèm lời chào dễ thương.
+- **Gửi Ảnh Đại Diện Tự Động (Google Drive / CDN)**: Khi thành viên yêu cầu xem mặt / xem hình / xem ảnh của bot, bot sẽ tự động quét thư mục Google Drive và bốc ngẫu nhiên ảnh gửi kèm lời chào dễ thương.
 - **Hỗ Trợ Nhóm Chat Zalo Tuyệt Vời**:
   - Nhận diện khi được thành viên **@mention** (`@Tên_Bot [câu hỏi]`).
   - Tự động bắt sự kiện khi thành viên **Reply (Trả lời)** vào tin nhắn của bot.
   - Tự động làm sạch thẻ tag để trích xuất đúng câu hỏi gửi cho AI.
--  **Tối Ưu Định Dạng Cho Zalo**:
+- **Tối Ưu Định Dạng Cho Zalo**:
   - Tự động chuẩn hóa câu trả lời: gạch đầu dòng rõ ràng, in đậm từ khóa, kèm emoji sinh động.
   - Tự động chia nhỏ tin nhắn (chunking) thông minh nếu phản hồi dài vượt quá 2.000 ký tự (giới hạn của Zalo).
--  **Giao Diện Web Quản Trị Đẹp Mắt**:
+- **Giao Diện Web Quản Trị Đẹp Mắt**:
   - Tích hợp sẵn Dashboard cấu hình Webhook **1-Click** ngay trên trình duyệt.
   - Kiểm tra trạng thái kết nối bot (`testWebhook`, `getMe`).
   - Khung thử nghiệm tương tác trực tiếp với Gemini AI (Chat Simulator).
@@ -30,8 +33,14 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 ```
 ├── api/
 │   ├── webhook.js         # Endpoint nhận webhook sự kiện từ Zalo (POST /api/webhook)
-│   ├── bot-service.js     # Thư viện gọi Zalo Bot API (sendMessage, setWebhook, testWebhook, getMe)
-│   ├── gemini-service.js  # Tích hợp Google GenAI SDK & chuẩn hóa định dạng Zalo
+│   ├── bot-service.js     # Thư viện gọi Zalo Bot API (sendMessage, sendPhoto, setWebhook...)
+│   ├── gemini-service.js  # Tích hợp Google Gemini AI, Intent Routing & Real-time Anchor
+│   ├── memory-service.js  # Quản lý bộ nhớ trò chuyện multi-turn qua Upstash Redis REST
+│   ├── reminder-service.js# Phân tích cú pháp hẹn giờ tiếng Việt & xử lý hàng đợi nhắc việc
+│   ├── reminder-cron.js   # Endpoint cron quét định kỳ nhắc việc cho Vercel Cron
+│   ├── search-service.js  # Tra cứu thông tin thời gian thực từ Google qua SerpApi
+│   ├── avatar-service.js  # Quét và bốc ngẫu nhiên avatar từ thư mục Google Drive
+│   ├── image-service.js   # Tạo prompt và render ảnh vẽ nghệ thuật AI (Flux / Polinations)
 │   ├── setup.js           # API phục vụ cấu hình & kiểm tra hệ thống trên Dashboard
 │   └── test-chat.js       # API test chat Gemini trực tiếp từ Web Dashboard
 ├── public/
@@ -57,6 +66,11 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 2. **Google Gemini API Key**:
    - Truy cập: [Google AI Studio](https://aistudio.google.com/apikey)
    - Đăng nhập tài khoản Google và bấm **"Create API key"** (Hoàn toàn miễn phí).
+3. **Upstash Redis (Miễn phí)**:
+   - Truy cập: [console.upstash.com](https://console.upstash.com)
+   - Tạo Database Redis Serverless miễn phí, copy `UPSTASH_REDIS_REST_URL` và `UPSTASH_REDIS_REST_TOKEN`.
+4. **SerpApi Key (Tùy chọn)**:
+   - Đăng ký miễn phí tại [serpapi.com](https://serpapi.com) để bot có khả năng tìm kiếm Google thời gian thực.
 
 ---
 
@@ -64,11 +78,15 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 
 1. Truy cập [vercel.com](https://vercel.com) và đăng nhập bằng GitHub.
 2. Bấm **"Add New..." > "Project"** và chọn Repository `HUY1602/Bot-chat-Zalo`.
-3. Tại mục **Environment Variables**, thêm 2 biến sau:
-   - `ZALO_BOT_TOKEN`: Dán token bot Zalo của bạn.
-   - `GEMINI_API_KEY`: Dán khóa API Google Gemini của bạn.
-   - *(Tùy chọn)* `GEMINI_MODEL`: `gemini-2.5-flash`
-4. Bấm nút **"Deploy"**. Đợi khoảng 30 giây bạn sẽ nhận được đường link Vercel công khai (ví dụ: `https://bot-chat-zalo-huy.vercel.app`).
+3. Tại mục **Environment Variables**, cấu hình các biến sau:
+   - `ZALO_BOT_TOKEN`: Token bot Zalo.
+   - `GEMINI_API_KEY`: API Key Google Gemini.
+   - `GEMINI_MODEL`: `gemini-3.5-flash-lite` (hoặc `gemini-2.5-flash`).
+   - `UPSTASH_REDIS_REST_URL`: URL REST của Upstash Redis.
+   - `UPSTASH_REDIS_REST_TOKEN`: Token REST của Upstash Redis.
+   - `SERPAPI_API_KEY`: API Key SerpApi (tra cứu Google).
+   - `BOT_AVATAR_URL`: Link thư mục Google Drive chứa ảnh avatar (hoặc link ảnh).
+4. Bấm nút **"Deploy"**. Đợi khoảng 30 giây bạn sẽ nhận được đường link Vercel công khai (ví dụ: `https://bot-chat-zalo-one.vercel.app`).
 
 ---
 
