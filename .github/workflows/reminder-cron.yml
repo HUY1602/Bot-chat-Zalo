@@ -1,0 +1,16 @@
+name: Reminder Cron Heartbeat
+
+on:
+  schedule:
+    # Quét định kỳ mỗi 5 phút kích hoạt các nhắc việc đến hạn
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-cron:
+    name: Ping Reminder Cron Endpoint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel Reminder Cron
+        run: |
+          curl -s -f "https://bot-chat-zalo-one.vercel.app/api/reminder-cron?format=json" || true

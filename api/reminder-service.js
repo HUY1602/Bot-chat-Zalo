@@ -159,20 +159,22 @@ function isReminderRequest(text) {
     return true;
   }
 
-  // 2. Không phải nhắc việc nếu chỉ hỏi xem danh sách
+  // 2. Không phải nhắc việc nếu chỉ hỏi xem danh sách hoặc hủy
   if (isListRemindersRequest(text) || isCancelReminderRequest(text)) {
     return false;
   }
 
-  // 3. Các mẫu câu tiếng Việt tự nhiên nhắc việc:
-  // "nhắc anh...", "nhắc em...", "nhắc tôi...", "hẹn giờ...", "đặt lịch..."
+  // 3. Các mẫu câu tiếng Việt tự nhiên nhắc việc, hẹn giờ, báo thức, gọi dậy:
   const patterns = [
-    /^(?:bot\s+|em\s+|bot\s+bien\s+)?(?:nhac|hen gio|dat lich|bao thuc)\b/i,
-    /\b(?:nhac|hen gio|dat lich)\s+(?:cho\s+)?(?:anh|chi|em|toi|minh|nhom|tui)\b/i,
-    /\b(?:\d+|mot|hai|ba|bon|nam|sau|bay|tam|chin|muoi)\s*(?:phut|giay|tieng|gio|ngay)\s*nua\s+(?:nhac|bao|goi)\b/i,
-    /\b(?:lat nua|ty nua|teo nua)\s+nhac\b/i,
-    /\b(?:nhac|bao)\s+(?:anh|chi|em|toi|minh|nhom)?\s*(?:luc|vao luc)?\s*\d{1,2}(?:h|:|\s*gio)\b/i,
-    /\b(?:mai|ngay mai|toi nay|chieu nay|sang mai)\s+nhac\b/i
+    /^(?:bot\s+|em\s+|bot\s+bien\s+)?(?:nhac|hen gio|dat lich|bao thuc|goi|keu|hen)\b/i,
+    /\b(?:nhac|hen gio|dat lich|bao thuc|goi|keu|hen)\s+(?:cho\s+)?(?:anh|chi|em|toi|minh|nhom|tui|2 em|hai em|moi nguoi)\b/i,
+    /\b(?:\d+|mot|hai|ba|bon|nam|sau|bay|tam|chin|muoi)\s*(?:phut|giay|tieng|gio|ngay)\s*nua\s+(?:nhac|bao|goi|keu|hen)\b/i,
+    /\b(?:lat nua|ty nua|teo nua)\s+(?:nhac|goi|keu|bao)\b/i,
+    /\b(?:nhac|bao|goi|keu|hen)\s+(?:anh|chi|em|toi|minh|nhom)?\s*(?:luc|vao luc)?\s*\d{1,2}(?:h|:|\s*gio)\b/i,
+    /\b(?:mai|ngay mai|toi nay|chieu nay|sang mai|trua nay)\s+(?:nhac|goi|keu|bao|hen)\b/i,
+    /^\s*\d{1,2}(?:h|:|\s*gio)\d{0,2}\s+(?:nhac|goi|keu|bao|hen|dat lich|bao thuc)\b/i,
+    /\b(?:\d{1,2}(?:h|:|\s*gio)\d{0,2})\b.*?\b(?:nhac|goi|keu|bao|hen|dat lich|bao thuc)\b/i,
+    /\b(?:nhac|goi|keu|bao|hen|dat lich|bao thuc)\b.*?\b(?:\d{1,2}(?:h|:|\s*gio)\d{0,2}|\d+\s*phut|\d+\s*tieng)\b/i
   ];
 
   return patterns.some(p => p.test(unaccented));
@@ -242,7 +244,20 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
   // Xác định đối tượng được nhắc (targetName)
   let targetName = senderName;
   let targetNameToRemove = '';
-  const targetMatch = text.match(/\b(?:nhắc|hẹn|báo)\s+(?:cho\s+)?(cả\s+nhóm|nhóm|anh|chị|em|tôi|mình)(?:\s+([A-Za-zÀ-ỹ]+))?\b/i);
+
+  // Nhận diện mẫu đặc biệt: "gọi [ai đó] dậy" hoặc "kêu [ai đó] dậy"
+  let isWakeUp = false;
+  const wakeUpMatch = text.match(/\b(?:gọi|kêu|nhắc|báo)\s+(?:cho\s+)?(.+?)\s+(?:dậy|thức dậy|ngủ dậy)\b/i);
+  if (wakeUpMatch) {
+    isWakeUp = true;
+    let rawWho = wakeUpMatch[1].replace(/^(?:cho\s+)?(?:2|hai)?\s*em\s+(?:của\s+)?(?:anh|tôi|mình)\s*(?:là)?\s*/i, '').trim();
+    if (rawWho) {
+      targetName = rawWho;
+      targetNameToRemove = wakeUpMatch[0];
+    }
+  }
+
+  const targetMatch = !wakeUpMatch && text.match(/\b(?:nhắc|hẹn|báo|gọi|kêu|báo thức)\s+(?:cho\s+)?(cả\s+nhóm|nhóm|anh|chị|em|tôi|mình|2\s+em|hai\s+em)(?:\s+([A-Za-zÀ-ỹ]+))?\b/i);
   if (targetMatch) {
     const pronoun = targetMatch[1].trim().toLowerCase();
     const potentialName = targetMatch[2] ? targetMatch[2].trim() : '';
@@ -286,27 +301,39 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
     scheduledTime = now + delayMs;
   }
 
-  // 2. Dạng thời gian tương đối: "10m", "30s", "1h", "2h30p", "15 phút", "2 tiếng"
+  // 2. Dạng thời gian tương đối: "10m nữa", "30s nữa", "15 phút nữa", "2 tiếng nữa", "sau 1 tiếng"
   if (!scheduledTime) {
     const shortFormatMatch = text.match(/\b(\d+)\s*(m|p|min|mins|phút|phut|s|sec|giây|giay|h|tiếng|tieng|giờ|gio)(?:\s*(\d+)\s*(?:p|phút|phut|m))?(?:\s*nữa)?\b/i);
-    if (shortFormatMatch && (/\bnữa\b/i.test(text) || /^\/(?:remind|nhac|hen)/i.test(rawText) || /\b(?:sau|trong)\b/i.test(text) || /^(?:\d+)/.test(text))) {
+    if (shortFormatMatch) {
       const val1 = parseInt(shortFormatMatch[1], 10);
       const unit1 = shortFormatMatch[2].toLowerCase();
       const val2 = shortFormatMatch[3] ? parseInt(shortFormatMatch[3], 10) : 0;
+      const isHourUnit = ['h', 'giờ', 'gio'].includes(unit1);
+      const isTiengUnit = ['tiếng', 'tieng'].includes(unit1);
+      const hasRelativeKeyword = /\b(?:nữa|sau|trong)\b/i.test(text);
+      const isSlashCommand = /^\/(?:remind|nhac|hen)/i.test(rawText);
 
-      let totalMs = 0;
-      if (['s', 'sec', 'giây', 'giay'].includes(unit1)) {
-        totalMs = val1 * 1000;
-      } else if (['m', 'p', 'min', 'mins', 'phút', 'phut'].includes(unit1)) {
-        totalMs = val1 * 60 * 1000;
-      } else if (['h', 'tiếng', 'tieng', 'giờ', 'gio'].includes(unit1)) {
-        totalMs = (val1 * 3600 + val2 * 60) * 1000;
-      }
+      // Nếu đơn vị là "h" hoặc "giờ" mà KHÔNG có từ tương đối (nữa/sau/trong) và không phải slash command,
+      // thì ĐÂY LÀ GIỜ TRONG NGÀY (ví dụ: "15h", "16h", "8h"), KHÔNG ĐƯỢC tính là thời gian tương đối!
+      const isTrueRelative = isTiengUnit || 
+                             (['s', 'sec', 'giây', 'giay', 'm', 'p', 'min', 'mins', 'phút', 'phut'].includes(unit1) && (hasRelativeKeyword || isSlashCommand || /^(?:\d+)\s*(?:m|p|phút|phut|s|giây)/i.test(text))) ||
+                             (isHourUnit && (hasRelativeKeyword || isSlashCommand));
 
-      if (totalMs > 0) {
-        delayMs = totalMs;
-        scheduledTime = now + delayMs;
-        matchedTimeText = shortFormatMatch[0];
+      if (isTrueRelative) {
+        let totalMs = 0;
+        if (['s', 'sec', 'giây', 'giay'].includes(unit1)) {
+          totalMs = val1 * 1000;
+        } else if (['m', 'p', 'min', 'mins', 'phút', 'phut'].includes(unit1)) {
+          totalMs = val1 * 60 * 1000;
+        } else if (isHourUnit || isTiengUnit) {
+          totalMs = (val1 * 3600 + val2 * 60) * 1000;
+        }
+
+        if (totalMs > 0) {
+          delayMs = totalMs;
+          scheduledTime = now + delayMs;
+          matchedTimeText = shortFormatMatch[0];
+        }
       }
     }
   }
@@ -408,11 +435,11 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
   task = task.trim();
 
   // Bỏ các từ mào đầu và đại từ
-  task = task.replace(/^(?:bot\s+|em\s+|bọt biển\s+ơi\s+|ơi\s+)?(?:nhắc|hẹn giờ|đặt lịch|báo thức)\s+/i, '');
-  task = task.replace(/^(?:cho\s+)?(?:cả\s+nhóm|nhóm|anh|chị|em|tôi|mình)\s+/i, '');
+  task = task.replace(/^(?:bot\s+|em\s+|bọt biển\s+ơi\s+|ơi\s+)?(?:nhắc|hẹn giờ|đặt lịch|báo thức|gọi|kêu)\s+/i, '');
+  task = task.replace(/^(?:cho\s+)?(?:cả\s+nhóm|nhóm|anh|chị|em|tôi|mình|2\s+em|hai\s+em)\s+/i, '');
   task = task.replace(/^(?:bọt biển\s+ơi\s+|em\s+ơi\s+|bot\s+ơi\s+|ơi\s+)/i, '');
-  // Tiếp tục bỏ từ 'nhắc' nếu vẫn còn đứng đầu sau khi loại bỏ đại từ
-  task = task.replace(/^nhắc\s+/i, '');
+  // Tiếp tục bỏ từ 'nhắc', 'gọi', 'kêu' nếu vẫn còn đứng đầu sau khi loại bỏ đại từ
+  task = task.replace(/^(?:nhắc|gọi|kêu)\s+/i, '');
   task = task.replace(/\b(?:lúc|vào lúc|nữa|hôm nay|ngày mai|sáng mai|chiều mai|tối mai|chiều nay|tối nay|sáng nay|ngày mốt|mốt|mai|hôm|nay)\b/gi, ' ');
   task = task.replace(/\b(?:nhớ|hãy|giúp|hộ|với|nhé|nha|ạ|đi|nhá|nghen|xem)\b/gi, ' ');
   // Bỏ bất kỳ mention bot nào còn sót lại trong task
@@ -422,6 +449,10 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
   task = task.replace(/\s*@\S+$/gi, '');
   task = task.replace(/\s{2,}/g, ' ');
   task = task.replace(/^[:\-,\s]+/, '').replace(/[:\-,\s]+$/, '').trim();
+
+  if (task.toLowerCase() === 'dậy' || task.toLowerCase() === 'thuc day' || (isWakeUp && (!task || task.length < 2 || task === 'Công việc đã hẹn giờ'))) {
+    task = 'thức dậy';
+  }
 
   if (!task || task.length < 2) {
     task = 'Công việc đã hẹn giờ';
@@ -771,9 +802,22 @@ function resolvePerson(rawTarget = '', senderName = 'Anh', fullText = '') {
 
   // 2. Tên cơ sở (bỏ tiền tố anh/chị/em nếu có để chuẩn hóa)
   let baseName = (rawTarget || senderName || 'Anh').trim();
-  baseName = baseName.replace(/^(?:anh|chị|em|bác|chú|cô|bạn)\s+/i, '').trim();
+  baseName = baseName.replace(/^(?:cho\s+)?(?:2|hai)?\s*em\s+(?:của\s+)?(?:anh|tôi|mình)\s*(?:là)?\s*/i, '');
+  baseName = baseName.replace(/^(?:các\s+)?(?:anh|chị|em|bác|chú|cô|bạn)\s+/i, '').trim();
   if (['tôi', 'mình'].includes(baseName.toLowerCase())) {
     baseName = (senderName || 'Anh').replace(/^(?:anh|chị|em|bác|chú|cô|bạn)\s+/i, '').trim();
+  }
+
+  // Nếu nhắc nhiều người (ví dụ: "Tường và Lộc", "Nam, Dũng")
+  if (/(?:\s+(?:và|va)\s+|[,&])/i.test(baseName)) {
+    const names = baseName.split(/(?:\s+(?:và|va)\s+|[,&])/i).filter(Boolean);
+    const mentionTag = names.map(n => `@${n.trim()}`).join(' ');
+    return {
+      pronoun: 'hai bạn',
+      displayName: `các anh ${names.join(' và ')}`,
+      mentionTag,
+      baseName
+    };
   }
 
   // 3. Xác định đại từ (pronoun)
@@ -834,5 +878,6 @@ module.exports = {
   buildConfirmationMessage,
   resolvePerson,
   formatTimeVN,
-  formatRelativeTime
+  formatRelativeTime,
+  removeVietnameseTones
 };
