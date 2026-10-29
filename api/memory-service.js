@@ -227,6 +227,22 @@ async function getAllChats() {
   return result;
 }
 
+/**
+ * Lưu payload webhook gần nhất vào Upstash Redis để tiện kiểm tra / debug
+ * @param {object} payload 
+ */
+async function saveDebugWebhook(payload) {
+  try {
+    const entry = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      payload
+    });
+    await upstashCommand(['LPUSH', 'zalo:debug:webhooks', entry]);
+    await upstashCommand(['LTRIM', 'zalo:debug:webhooks', 0, 19]);
+    await upstashCommand(['EXPIRE', 'zalo:debug:webhooks', 86400 * 3]);
+  } catch (err) {}
+}
+
 module.exports = {
   getHistory,
   addTurn,
@@ -234,6 +250,7 @@ module.exports = {
   getAllChats,
   getMemoryStatus,
   MAX_HISTORY_MESSAGES,
+  saveDebugWebhook,
   DEFAULT_TTL_SECONDS
 };
 

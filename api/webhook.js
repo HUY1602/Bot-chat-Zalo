@@ -29,6 +29,122 @@ function cleanupCache() {
  * @param {string} rawText 
  * @returns {string}
  */
+/**
+ * Trích xuất link hình ảnh và thông tin trích dẫn từ sự kiện webhook
+ * Hỗ trợ cả trường hợp gửi ảnh trực tiếp và trả lời (quote/reply) tin nhắn ảnh
+ * @param {object} payload - Toàn bộ request body
+ * @param {object} event - Đối tượng sự kiện
+ * @param {object} message - Đối tượng tin nhắn
+ * @returns {{ imageUrl: string|null, quoteText: string, quotedSender: string }}
+ */
+function extractImageAndQuote(payload = {}, event = {}, message = {}) {
+  let imageUrl = null;
+  let quoteText = '';
+  let quotedSender = '';
+
+  // 1. Kiểm tra hình ảnh trực tiếp trong tin nhắn hiện tại
+  if (message.photo_url) {
+    imageUrl = message.photo_url;
+  } else if (typeof message.photo === 'string' && message.photo.startsWith('http')) {
+    imageUrl = message.photo;
+  } else if (Array.isArray(message.photo) && message.photo.length > 0) {
+    const best = message.photo[message.photo.length - 1];
+    imageUrl = best?.url || (typeof best === 'string' ? best : null);
+  } else if (Array.isArray(message.attachments) && message.attachments.length > 0) {
+    for (const att of message.attachments) {
+      const u = att.url || att.photo_url || att.payload?.url;
+      if (u) { imageUrl = u; break; }
+    }
+  }
+
+  // 2. Kiểm tra tin nhắn được trích dẫn / trả lời (Quote / Reply)
+  const quoteCandidates = [
+    message.reply_to_message,
+    message.quote,
+    message.reply,
+    message.quoted_message,
+    message.message_reply,
+    message.quote_message,
+    event.reply_to_message,
+    event.quote,
+    event.quote_message,
+    payload.reply_to_message,
+    payload.quote
+  ].filter(Boolean);
+
+  let quotedObj = quoteCandidates.length > 0 ? quoteCandidates[0] : null;
+
+  // Nếu quote là chuỗi JSON được serialize
+  if (typeof quotedObj === 'string' && (quotedObj.startsWith('{') || quotedObj.startsWith('['))) {
+    try {
+      quotedObj = JSON.parse(quotedObj);
+    } catch (e) {}
+  }
+
+  if (quotedObj && typeof quotedObj === 'object') {
+    // Trích xuất tên người được quote
+    quotedSender = quotedObj.from?.display_name || quotedObj.from?.name || quotedObj.sender_name || '';
+
+    // Nếu tin nhắn hiện tại chưa có ảnh, tìm ảnh trong tin nhắn được trích dẫn
+    if (!imageUrl) {
+      if (quotedObj.photo_url) {
+        imageUrl = quotedObj.photo_url;
+      } else if (typeof quotedObj.photo === 'string' && quotedObj.photo.startsWith('http')) {
+        imageUrl = quotedObj.photo;
+      } else if (Array.isArray(quotedObj.photo) && quotedObj.photo.length > 0) {
+        const best = quotedObj.photo[quotedObj.photo.length - 1];
+        imageUrl = best?.url || (typeof best === 'string' ? best : null);
+      } else if (quotedObj.url && /^https?:\/\//i.test(quotedObj.url)) {
+        imageUrl = quotedObj.url;
+      } else if (quotedObj.thumb_url || quotedObj.thumbnail_url) {
+        imageUrl = quotedObj.thumb_url || quotedObj.thumbnail_url;
+      } else if (quotedObj.image_url) {
+        imageUrl = quotedObj.image_url;
+      } else if (Array.isArray(quotedObj.attachments) && quotedObj.attachments.length > 0) {
+        for (const att of quotedObj.attachments) {
+          const u = att.url || att.photo_url || att.payload?.url;
+          if (u) { imageUrl = u; break; }
+        }
+      }
+    }
+
+    // Tạo ngữ cảnh trích dẫn văn bản
+    const rawQuoteText = quotedObj.text || quotedObj.caption || '';
+    if (rawQuoteText) {
+      quoteText = quotedSender
+        ? `[Đang trả lời tin nhắn của ${quotedSender}: "${rawQuoteText}"]`
+        : `[Đang trả lời tin nhắn: "${rawQuoteText}"]`;
+    } else if (imageUrl) {
+      quoteText = quotedSender
+        ? `[Đang trả lời hình ảnh do ${quotedSender} gửi]`
+        : `[Đang trả lời một hình ảnh]`;
+    }
+  }
+
+  // 3. Fallback tìm kiếm đệ quy mọi URL ảnh trong quotedObj nếu vẫn chưa thấy
+  if (!imageUrl && quotedObj) {
+    function findImageUrl(obj, depth = 0) {
+      if (!obj || depth > 5) return null;
+      if (typeof obj === 'string') {
+        if (/^https?:\/\/[^\s"'<>]+\.(?:jpe?g|png|webp|gif)(?:\?[^\s"'<>]*)?/i.test(obj) ||
+            (obj.startsWith('http') && (obj.includes('zdn.vn') || obj.includes('zalo') || obj.includes('photo')))) {
+          return obj;
+        }
+        return null;
+      }
+      if (typeof obj !== 'object') return null;
+      for (const key of Object.keys(obj)) {
+        const res = findImageUrl(obj[key], depth + 1);
+        if (res) return res;
+      }
+      return null;
+    }
+    imageUrl = findImageUrl(quotedObj, 0);
+  }
+
+  return { imageUrl, quoteText, quotedSender };
+}
+
 function cleanMention(rawText) {
   if (!rawText) return '';
   let cleaned = rawText.trim();
@@ -124,6 +240,7 @@ module.exports = async function handler(req, res) {
 
   const payload = req.body || {};
   console.log('Incoming Zalo Webhook Event:', JSON.stringify(payload, null, 2));
+  memoryService.saveDebugWebhook(payload).catch(() => {});
 
   // Extract event data (support standard Zalo Bot Platform & nested result & legacy OA)
   const event = payload.result || payload;
@@ -139,7 +256,7 @@ module.exports = async function handler(req, res) {
 
   // Extract fields
   const msgId = message.msg_id || message.message_id || event.msg_id || payload.msg_id;
-  const rawText = message.text || '';
+  const rawText = message.text || message.caption || '';
   const chat = message.chat || {};
   const chatId = chat.id || event.sender?.id || payload.chat_id;
   const chatType = String(chat.type || chat.chat_type || 'group').toLowerCase();
@@ -164,9 +281,23 @@ module.exports = async function handler(req, res) {
     processedMessageIds.set(msgId, Date.now());
   }
 
+  // Extract image and quoted message context (Vision & Contextual Reply)
+  const { imageUrl, quoteText } = extractImageAndQuote(payload, event, message);
+  let imageBuffer = null;
+  if (imageUrl) {
+    console.log(`[Vision] Phát hiện hình ảnh đính kèm: ${imageUrl}`);
+    imageBuffer = await geminiService.fetchImageAsBase64(imageUrl);
+    if (imageBuffer) {
+      console.log(`[Vision] Nạp ảnh thành công (MIME: ${imageBuffer.mimeType}, Base64: ${imageBuffer.data.length} chars)`);
+    }
+  }
+
   // Process text message
-  const userQuery = cleanMention(rawText);
-  console.log(`[Chat ${chatId} (${chatType})] Từ ${senderName}: "${rawText}" -> Câu hỏi: "${userQuery}"`);
+  let userQuery = cleanMention(rawText);
+  if (!userQuery && imageBuffer) {
+    userQuery = 'Hãy quan sát kỹ bức ảnh này và mô tả, phân tích hoặc nhận xét chi tiết giúp anh/chị nhé!';
+  }
+  console.log(`[Chat ${chatId} (${chatType})] Từ ${senderName}: "${rawText}" -> Câu hỏi: "${userQuery}"${imageUrl ? ' [KÈM ẢNH]' : ''}`);
 
   try {
     // 0. Built-in command: /reset, /clear hoặc /forget (xóa bộ nhớ trò chuyện)
@@ -330,9 +461,9 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true, action: 'summarizeConversation', count: recentMessages.length });
     }
 
-    // 3. Nếu người dùng chỉ tag bot mà không hỏi gì
-    if (!userQuery) {
-      const emptyText = `Dạ, ${senderName} gọi em ạ? 🫧 Anh/chị cần hỏi gì cứ nhắn cho em nha!`;
+    // 3. Nếu người dùng chỉ tag bot mà không hỏi gì và cũng không gửi kèm ảnh
+    if (!userQuery && !imageBuffer) {
+      const emptyText = `Dạ, ${senderName} gọi em ạ? 🫧 Anh/chị cần hỏi gì hoặc gửi hình ảnh nào cho em xem cứ nhắn nha!`;
       await botService.sendMessage(chatId, emptyText, msgId);
       return res.status(200).json({ ok: true });
     }
@@ -351,13 +482,15 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // Gắn tên người gửi rõ ràng theo định dạng [Tên]: Nội dung để AI phân biệt từng người
-    const userPrompt = `[${senderName}]: ${userQuery}`;
-    const contextualQuery = `${userPrompt}${searchContext}`;
+    // Gắn tên người gửi rõ ràng kèm thông tin trích dẫn / hình ảnh để AI phân tích chuẩn xác
+    const userPrompt = `[${senderName}]${imageBuffer ? ' (kèm hình ảnh)' : ''}: ${userQuery}`;
+    const fullUserContext = quoteText ? `${quoteText}\n${userPrompt}` : userPrompt;
+    const contextualQuery = `${fullUserContext}${searchContext}`;
 
-    // 5. Gửi câu hỏi đến Gemini AI để tự động nhận diện ý định (Semantic Intent Routing)
+    // 5. Gửi câu hỏi đến Gemini AI (kèm hình ảnh Vision nếu có)
     const { action } = await geminiService.generateAnswerWithAction(contextualQuery, {
-      history
+      history,
+      image: imageBuffer
     });
 
     // 6. Xử lý các hành động ngữ nghĩa do Gemini quyết định

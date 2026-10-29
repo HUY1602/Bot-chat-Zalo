@@ -42,6 +42,14 @@ VỀ KHẢ NĂNG VẼ TRANH & TẠO ẢNH AI:
 • Bạn có siêu năng lực VẼ TRANH / TẠO ẢNH AI theo yêu cầu của các thành viên trong nhóm!
 • Khi ai đó bảo bạn vẽ hoặc khen bức tranh bạn vẽ ("em vẽ đẹp thế", "tranh đỉnh quá"), hãy cảm ơn thật dễ thương và gợi ý họ có thể nhờ bạn vẽ thêm nhiều tranh khác.
 
+VỀ KHẢ NĂNG NHẬN DIỆN & PHÂN TÍCH HÌNH ẢNH (VISION):
+• Khi người dùng gửi kèm hình ảnh hoặc trả lời (quote) một bức ảnh để hỏi ("sản phẩm này oke không", "xem hộ em cái này", "đây là cái gì", "đọc chữ trong hình", "giải bài này giúp",...):
+  - Hãy quan sát thật kỹ bức ảnh được đính kèm.
+  - Phân tích chi tiết: tên sản phẩm, thương hiệu, thành phần, công dụng, bao bì, chữ viết hoặc chi tiết quan trọng trong ảnh.
+  - Đưa ra nhận xét, đánh giá khách quan, chi tiết, hữu ích và giải đáp chính xác câu hỏi của người dùng.
+  - Vẫn giữ phong cách ngọt ngào, lễ phép, gần gũi của Bọt biển cute.
+  - Tuyệt đối KHÔNG nói "em không thấy ảnh" hay "anh/chị chưa gửi hình" khi ảnh đã được đính kèm vào câu hỏi!
+
 VỀ DỮ LIỆU TRA CỨU INTERNET (BẮT BUỘC DÙNG LÀM CHÂN LÝ DUY NHẤT):
 • Khi câu hỏi của người dùng có kèm phần "--- DỮ LIỆU THỰC TẾ TRA CỨU TỪ GOOGLE...", đây là dữ liệu thời gian thực CHÍNH XÁC NHẤT. Bạn BẮT BUỘC phải dựa 100% vào dữ liệu này để trả lời cho người dùng.
 • PHÂN BIỆT ĐÚNG ĐỐI TƯỢNG VÀ PHẠM VI (RẤT QUAN TRỌNG):
@@ -151,9 +159,84 @@ function formatForZalo(text) {
  * Prepare and sanitize contents array for Gemini API multi-turn chat
  * Ensures valid role alternation: user -> model -> user
  */
-function prepareContents(prompt, history = []) {
+/**
+ * Tải hình ảnh từ URL và chuyển thành Base64 để gửi tới Gemini Vision API
+ * @param {string} imageUrl - URL của bức ảnh
+ * @param {number} [timeoutMs=8000] - Thời gian chờ tối đa
+ * @returns {Promise<{mimeType: string, data: string}|null>}
+ */
+async function fetchImageAsBase64(imageUrl, timeoutMs = 8000) {
+  if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('http')) {
+    return null;
+  }
+
+  // Tự động nâng cấp sang HTTPS đối với các domain CDN của Zalo
+  let url = imageUrl;
+  if (url.startsWith('http://') && url.includes('zdn.vn')) {
+    url = url.replace('http://', 'https://');
+  }
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+      }
+    });
+
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      console.warn(`[ImageFetch] Tải ảnh thất bại HTTP ${res.status}: ${url}`);
+      return null;
+    }
+
+    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    const mimeType = contentType.split(';')[0].trim().toLowerCase() || 'image/jpeg';
+
+    const buffer = await res.arrayBuffer();
+    if (!buffer || buffer.byteLength === 0) {
+      return null;
+    }
+
+    if (buffer.byteLength > 15 * 1024 * 1024) {
+      console.warn(`[ImageFetch] Dung lượng ảnh quá lớn (${buffer.byteLength} bytes), bỏ qua.`);
+      return null;
+    }
+
+    const base64Data = Buffer.from(buffer).toString('base64');
+    return {
+      mimeType,
+      data: base64Data
+    };
+  } catch (err) {
+    console.warn(`[ImageFetch Error] Không thể nạp ảnh từ ${url}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Prepare and sanitize contents array for Gemini API multi-turn chat
+ * Supports optional multimodal image attachments (inlineData)
+ * Ensures valid role alternation: user -> model -> user
+ */
+function prepareContents(prompt, history = [], image = null) {
+  const currentParts = [{ text: prompt }];
+  if (image && image.data) {
+    currentParts.push({
+      inlineData: {
+        mimeType: image.mimeType || 'image/jpeg',
+        data: image.data
+      }
+    });
+  }
+
   if (!history || !Array.isArray(history) || history.length === 0) {
-    return [{ role: 'user', parts: [{ text: prompt }] }];
+    return [{ role: 'user', parts: currentParts }];
   }
 
   const valid = [];
@@ -173,17 +256,25 @@ function prepareContents(prompt, history = []) {
   if (expectedRole === 'user') {
     valid.push({
       role: 'user',
-      parts: [{ text: prompt }]
+      parts: currentParts
     });
   } else {
     // If last turn was user, append current prompt into it
     const last = valid[valid.length - 1];
     if (last && last.role === 'user') {
       last.parts[0].text += `\n${prompt}`;
+      if (image && image.data) {
+        last.parts.push({
+          inlineData: {
+            mimeType: image.mimeType || 'image/jpeg',
+            data: image.data
+          }
+        });
+      }
     } else {
       valid.push({
         role: 'user',
-        parts: [{ text: prompt }]
+        parts: currentParts
       });
     }
   }
@@ -301,7 +392,7 @@ async function generateAnswer(prompt, options = {}) {
   const promptWithTimeAnchor = `${timeAnchor}${prompt}`;
 
   // Prepare multi-turn contents if history exists
-  const contents = prepareContents(promptWithTimeAnchor, options.history);
+  const contents = prepareContents(promptWithTimeAnchor, options.history, options.image);
 
   // Try configured model first
   try {
@@ -437,6 +528,7 @@ module.exports = {
   parseGeminiAction,
   formatForZalo,
   getVietnamTimeString,
+  fetchImageAsBase64,
   DEFAULT_SYSTEM_INSTRUCTION,
   DEFAULT_MODEL
 };
