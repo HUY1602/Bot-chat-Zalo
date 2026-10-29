@@ -109,7 +109,9 @@ async function sendMessage(chatId, text, replyToMsgId = null, token = process.en
   if (!token) throw new Error('ZALO_BOT_TOKEN is not defined');
   if (!chatId) throw new Error('chat_id is required');
 
-  const chunks = splitMessage(text);
+  // Safety cleanup: loại bỏ triệt để các chuỗi ID thô dạng [@user_id] hoặc [@oa_id]
+  const cleanText = text.replace(/\[@?[a-f0-9]{16,}\]\s*/gi, '');
+  const chunks = splitMessage(cleanText);
   const results = [];
   const endpoint = `${ZALO_API_BASE}${token}/sendMessage`;
 

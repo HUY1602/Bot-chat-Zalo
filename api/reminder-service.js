@@ -427,12 +427,13 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
     task = 'Công việc đã hẹn giờ';
   }
 
+  const person = resolvePerson(targetName, senderName, rawText);
   return {
     ok: true,
     delayMs,
     scheduledTime,
     task,
-    targetName,
+    targetName: person.displayName,
     timeFormatted: formatTimeVN(scheduledTime),
     relativeFormatted: formatRelativeTime(delayMs)
   };
@@ -711,12 +712,11 @@ async function checkAndTriggerReminders() {
     }
 
     if (reminder && reminder.chatId) {
-      const pronoun = getPronoun(reminder.targetName, reminder.senderName);
-      const mentionText = formatMentionName(reminder.targetName);
-      const actionPronoun = pronoun === 'cả nhóm' ? 'cả nhóm' : pronoun;
+      const person = resolvePerson(reminder.targetName, reminder.senderName, reminder.task);
 
-      // Tạo tin nhắn nhắc nhở ngọt ngào từ Bọt biển
-      const triggerMessage = `⏰ RENG RENG RENG! Đến giờ rồi nè ${mentionText} ơi! 🫧🔔\n\n📌 Lời nhắc: ${reminder.task}\n🕒 Đã hẹn: ${reminder.timeFormatted}\n\nEm nhắc đúng giờ rồi nha, ${actionPronoun} nhớ làm liền nghen! Đừng quên đó nè 🥰✨`;
+      // Tạo tin nhắn nhắc nhở ngọt ngào từ Bọt biển (không có chuỗi ID thô hay anh/chị chung chung)
+      let triggerMessage = `⏰ RENG RENG RENG! Đến giờ rồi nè ${person.mentionTag} ơi! 🫧🔔\n\n📌 Lời nhắc: ${reminder.task}\n🕒 Đã hẹn: ${reminder.timeFormatted}\n\nEm nhắc đúng giờ rồi nha, ${person.pronoun} nhớ làm liền nghen! Đừng quên đó nè 🥰✨`;
+      triggerMessage = triggerMessage.replace(/\[@?[a-f0-9]{16,}\]\s*/gi, '');
 
       try {
         // Gửi tin nhắn có reply_to_message_id trích dẫn tin nhắn hẹn ban đầu để Zalo phát chuông ping người dùng
@@ -750,43 +750,61 @@ async function checkAndTriggerReminders() {
 }
 
 /**
- * Lấy đại từ xưng hô phù hợp dựa trên đối tượng hoặc người gửi
- * @param {string} targetName 
+ * Phân tích danh xưng và đối tượng chuẩn xác nhất, loại bỏ hoàn toàn "anh/chị" chung chung
+ * @param {string} rawTarget 
  * @param {string} senderName 
- * @returns {string} 'anh' | 'chị' | 'em' | 'cả nhóm' | 'anh/chị'
+ * @param {string} fullText 
+ * @returns {{ pronoun: string, displayName: string, mentionTag: string, baseName: string }}
  */
-function getPronoun(targetName = '', senderName = '') {
-  const combined = `${targetName} ${senderName}`.toLowerCase();
-  if (/\b(?:cả\s*nhóm|nhóm|mọi\s*người|mng|cả\s*nhà)\b/i.test(combined)) {
-    return 'cả nhóm';
-  }
-  if (/\b(?:anh|a)\b/i.test(targetName)) {
-    return 'anh';
-  }
-  if (/\b(?:chị|chi|c)\b/i.test(targetName)) {
-    return 'chị';
-  }
-  if (/\b(?:em|bé)\b/i.test(targetName)) {
-    return 'em';
-  }
-  return 'anh/chị';
-}
+function resolvePerson(rawTarget = '', senderName = 'Anh', fullText = '') {
+  const combined = `${rawTarget} ${senderName} ${fullText}`.toLowerCase();
 
-/**
- * Xây dựng chuỗi gọi tên / mention chuẩn đẹp cho Zalo
- * @param {string} targetName 
- * @returns {string}
- */
-function formatMentionName(targetName = '') {
-  if (!targetName || targetName === 'cả nhóm mình' || targetName === 'cả nhóm') {
-    return '@cả nhóm';
+  // 1. Cả nhóm
+  if (/\b(?:cả\s*nhóm|nhóm|mọi\s*người|mng|cả\s*nhà)\b/i.test(combined)) {
+    return {
+      pronoun: 'cả nhóm',
+      displayName: 'cả nhóm mình',
+      mentionTag: '@cả nhóm',
+      baseName: 'cả nhóm'
+    };
   }
-  let name = targetName.trim();
-  if (name.includes('@')) return name;
-  if (/^(?:anh|chị|em)\s+/i.test(name)) {
-    return name.replace(/^((?:anh|chị|em)\s+)(.+)$/i, '$1@$2');
+
+  // 2. Tên cơ sở (bỏ tiền tố anh/chị/em nếu có để chuẩn hóa)
+  let baseName = (rawTarget || senderName || 'Anh').trim();
+  baseName = baseName.replace(/^(?:anh|chị|em|bác|chú|cô|bạn)\s+/i, '').trim();
+  if (['tôi', 'mình'].includes(baseName.toLowerCase())) {
+    baseName = (senderName || 'Anh').replace(/^(?:anh|chị|em|bác|chú|cô|bạn)\s+/i, '').trim();
   }
-  return `@${name}`;
+
+  // 3. Xác định đại từ (pronoun)
+  let pronoun = 'anh'; // Mặc định là anh theo phong cách Bọt biển cute
+
+  if (/\b(?:chị|chi|c)\b/i.test(rawTarget) || /\b(?:nhắc\s+chị)\b/i.test(fullText)) {
+    pronoun = 'chị';
+  } else if (/\b(?:chị\s+)/i.test(senderName)) {
+    pronoun = 'chị';
+  } else if (/\b(?:nhắc\s+em)\b/i.test(fullText) && !/\b(?:nhắc\s+anh)\b/i.test(fullText)) {
+    pronoun = 'em';
+  } else if (/\b(?:nhắc\s+anh|anh\s+)\b/i.test(fullText) || /\b(?:anh|a)\b/i.test(rawTarget)) {
+    pronoun = 'anh';
+  } else {
+    // Kiểm tra tên nữ phổ biến ở Việt Nam
+    const FEMALE_NAMES = /\b(?:thị|ngọc|hương|hoa|lan|linh|thảo|trang|huyền|dung|hà|nhung|nga|quỳnh|yến|vy|trâm|oanh|hằng|nhi|my|ly|chi|diệp|mơ|đào|vân|tuyết|ngân)\b/i;
+    // Tên nam phổ biến
+    const MALE_NAMES = /\b(?:văn|quang|huy|tường|nam|dũng|tuấn|hoàng|cường|đức|minh|hải|phong|thành|trung|khánh|việt|quân|long|bách|khoa|thắng|phúc|tú|bảo|đạt|sơn|vinh|tân|hùng|tùng|tiến|toàn|trọng|vũ|kiên|hiếu|duy|hưng|nghĩa|phát|lộc|khôi|nhật|hào|hậu|bình|đông|tài|đăng|nghiêm)\b/i;
+
+    const lowerBase = baseName.toLowerCase();
+    if (FEMALE_NAMES.test(lowerBase) && !MALE_NAMES.test(lowerBase)) {
+      pronoun = 'chị';
+    } else {
+      pronoun = 'anh';
+    }
+  }
+
+  const displayName = `${pronoun} ${baseName}`;
+  const mentionTag = `${pronoun} @${baseName}`;
+
+  return { pronoun, displayName, mentionTag, baseName };
 }
 
 /**
@@ -795,14 +813,12 @@ function formatMentionName(targetName = '') {
  * @returns {string}
  */
 function buildConfirmationMessage(reminder) {
-  const pronoun = getPronoun(reminder.targetName, reminder.senderName);
-  let greetingName = reminder.targetName;
-  if (!greetingName || greetingName === 'cả nhóm mình' || greetingName === 'cả nhóm') {
-    greetingName = reminder.senderName || 'cả nhóm';
-  }
-  const actionPronoun = pronoun === 'cả nhóm' ? 'cả nhóm' : pronoun;
+  const person = resolvePerson(reminder.targetName, reminder.senderName, reminder.rawText || reminder.task || '');
+  const greeting = reminder.senderName && reminder.senderName !== 'Thành viên'
+    ? reminder.senderName
+    : person.displayName;
 
-  return `Dạ Bọt biển đã ghi nhớ lịch nhắc rồi nè ${greetingName} ơi! ⏰✨\n\n📌 Việc cần nhắc: ${reminder.task}\n🕒 Thời gian nhắc: ${reminder.timeFormatted} (${formatRelativeTime(reminder.scheduledTime - Date.now())})\n👤 Đối tượng: ${reminder.targetName}\n\n🫧 Đến đúng giờ em sẽ réo chuông nhắc ${actionPronoun} liền nha! 🥰`;
+  return `Dạ Bọt biển đã ghi nhớ lịch nhắc rồi nè ${greeting} ơi! ⏰✨\n\n📌 Việc cần nhắc: ${reminder.task}\n🕒 Thời gian nhắc: ${reminder.timeFormatted} (${formatRelativeTime(reminder.scheduledTime - Date.now())})\n👤 Đối tượng: ${person.displayName}\n\n🫧 Đến đúng giờ em sẽ réo chuông nhắc ${person.pronoun} liền nha! 🥰`;
 }
 
 module.exports = {
@@ -816,6 +832,7 @@ module.exports = {
   cancelReminder,
   checkAndTriggerReminders,
   buildConfirmationMessage,
+  resolvePerson,
   formatTimeVN,
   formatRelativeTime
 };

@@ -40,7 +40,6 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({
         ok: true,
         service: 'Zalo Bot Reminder Cron',
-        version: 'build-check-1315',
         timestamp: new Date().toISOString(),
         triggeredCount: triggerResult.triggeredCount,
         triggered: triggerResult.triggered
