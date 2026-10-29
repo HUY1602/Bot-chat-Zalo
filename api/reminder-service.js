@@ -251,13 +251,16 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
   if (wakeUpMatch) {
     isWakeUp = true;
     let rawWho = wakeUpMatch[1].replace(/^(?:cho\s+)?(?:2|hai)?\s*em\s+(?:của\s+)?(?:anh|tôi|mình)\s*(?:là)?\s*/i, '').trim();
-    if (rawWho) {
+    const SELF_PRONOUNS = /^(?:a|anh|e|em|tôi|toi|t|mình|minh|m|tao|bác|bac|chú|chu|cô|co)$/i;
+    if (SELF_PRONOUNS.test(rawWho)) {
+      targetName = senderName;
+    } else if (rawWho) {
       targetName = rawWho;
-      targetNameToRemove = wakeUpMatch[0];
     }
+    targetNameToRemove = wakeUpMatch[0];
   }
 
-  const targetMatch = !wakeUpMatch && text.match(/\b(?:nhắc|hẹn|báo|gọi|kêu|báo thức)\s+(?:cho\s+)?(cả\s+nhóm|nhóm|anh|chị|em|tôi|mình|2\s+em|hai\s+em)(?:\s+([A-Za-zÀ-ỹ]+))?\b/i);
+  const targetMatch = !wakeUpMatch && text.match(/\b(?:nhắc|hẹn|báo|gọi|kêu|báo thức)\s+(?:cho\s+)?(cả\s+nhóm|nhóm|anh|chị|em|tôi|mình|2\s+em|hai\s+em|a|e)(?:\s+([A-Za-zÀ-ỹ]+))?\b/i);
   if (targetMatch) {
     const pronoun = targetMatch[1].trim().toLowerCase();
     const potentialName = targetMatch[2] ? targetMatch[2].trim() : '';
@@ -267,16 +270,14 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
     if (pronoun === 'cả nhóm' || pronoun === 'nhóm') {
       targetName = 'cả nhóm mình';
       targetNameToRemove = targetMatch[1];
-    } else if (['tôi', 'mình'].includes(pronoun)) {
+    } else if (['tôi', 'mình', 'a', 'e'].includes(pronoun) || !potentialName || EXCLUDED_WORDS.test(removeVietnameseTones(potentialName))) {
       targetName = senderName;
       targetNameToRemove = targetMatch[1];
     } else if (potentialName && !EXCLUDED_WORDS.test(removeVietnameseTones(potentialName))) {
       targetName = `${targetMatch[1]} ${potentialName}`;
       targetNameToRemove = `${targetMatch[1]} ${potentialName}`;
     } else {
-      if (pronoun === 'anh') targetName = senderName.startsWith('anh') ? senderName : `anh ${senderName}`;
-      else if (pronoun === 'chị') targetName = senderName.startsWith('chị') ? senderName : `chị ${senderName}`;
-      else targetName = senderName;
+      targetName = senderName;
       targetNameToRemove = targetMatch[1];
     }
   }
@@ -846,7 +847,7 @@ function resolvePerson(rawTarget = '', senderName = 'Anh', fullText = '') {
   }
 
   const displayName = `${pronoun} ${baseName}`;
-  const mentionTag = `${pronoun} @${baseName}`;
+  const mentionTag = baseName === 'cả nhóm' ? '@cả nhóm' : `@${baseName}`;
 
   return { pronoun, displayName, mentionTag, baseName };
 }

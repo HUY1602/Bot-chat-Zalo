@@ -14,3 +14,4 @@ jobs:
       - name: Trigger Vercel Reminder Cron
         run: |
           curl -s -f "https://bot-chat-zalo-one.vercel.app/api/reminder-cron?format=json" || true
+

@@ -20,7 +20,6 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      deployCheck: 'deploy-check-1458',
       env: {
         hasZaloToken: Boolean(process.env.ZALO_BOT_TOKEN),
         hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
