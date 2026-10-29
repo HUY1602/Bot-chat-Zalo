@@ -695,16 +695,16 @@ function getAvatarCaption(senderName = 'anh/chị', isOther = false) {
   if (isOther) {
     const otherCaptions = [
       `Dạ đây là góc khác của em nè ${name} ơi! 🫧 Em đổi tấm khác cho ${name} ngắm nè 🥰 Xinh không ạ? ✨`,
-      `Dạ tấm ảnh khác của em đây nè ${name}! 🌸 Bọt biển cute có nhiều ảnh lắm nè hihi 🫧`,
+      `Dạ tấm ảnh khác của em đây nè ${name}! ✨ Bọt biển cute có nhiều ảnh lắm nè hihi 🫧`,
       `Dạ em đổi ảnh mới cho ${name} liền nè! ✨ Tấm này nhìn em có đáng yêu không nè? 🥰`,
-      `Dạ hình khác của em đây nè ${name} ơi! 🫧 Mỗi lần ${name} hỏi là em lại biến hình đó nha 🌸`
+      `Dạ hình khác của em đây nè ${name} ơi! 🫧 Mỗi lần ${name} hỏi là em lại biến hình đó nha 🥰`
     ];
     return otherCaptions[Math.floor(Math.random() * otherCaptions.length)];
   }
 
   const captions = [
     `Dạ đây là hình của em nè ${name} ơi! 🫧 Em là Bọt biển cute đó ạ 🥰 Nhìn em có đáng yêu không nè? ✨`,
-    `Dạ dung nhan của em đây nè ${name}! 🌸 Em gửi tấm hình xịn nhất của em cho ${name} ngắm nè 🫧`,
+    `Dạ dung nhan của em đây nè ${name}! ✨ Em gửi tấm hình xịn nhất của em cho ${name} ngắm nè 🫧`,
     `Dạ hình của em nè ${name} ơi! ✨ Bọt biển cute xuất hiện rồi đây ạ 🥰`
   ];
   return captions[Math.floor(Math.random() * captions.length)];

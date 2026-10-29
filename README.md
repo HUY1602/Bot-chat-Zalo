@@ -10,7 +10,7 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 - **Tích hợp Google Gemini 2.5 Flash / 3.5 Flash**: Phản hồi siêu nhanh (500ms - 1.5s), thông minh, xử lý đa lĩnh vực bằng tiếng Việt tự nhiên.
 - **Trí Nhớ Hội Thoại 24/7 Bền Bỉ (Upstash Redis)**: Lưu trữ lịch sử chat nhiều lượt (multi-turn), ghi nhớ ngữ cảnh riêng biệt cho từng thành viên trong nhóm, không bị mất dữ liệu khi serverless function ngủ đông.
 - **Nhận Thức Thời Gian Thực Tuyệt Đối (Real-Time Context Anchor)**: Tự động neo mốc thời gian thực tế chuẩn múi giờ Việt Nam (GMT+7) vào từng lượt câu hỏi, loại bỏ hoàn toàn lỗi mô hình AI bị "neo tư duy" theo các mốc ngày cũ trong lịch sử trò chuyện.
-- **Tóm Tắt Cuộc Trò Chuyện Thông Minh (Conversation Recap)**: Tự động trích xuất và tóm tắt súc tích 20 tin nhắn gần nhất trong nhóm bằng AI, phân loại các chủ đề thảo luận chính và các điểm đáng chú ý/thống nhất của các thành viên (	óm tắt cuộc trò chuyện, 	óm tắt 20 tin nhắn gần nhất, /tomtat, /summary).
+- **Tóm Tắt Cuộc Trò Chuyện Thông Minh (Conversation Recap)**: Tự động trích xuất và tóm tắt súc tích 20 tin nhắn gần nhất trong nhóm bằng AI, phân loại các chủ đề thảo luận chính và các điểm đáng chú ý/thống nhất của các thành viên (tóm tắt cuộc trò chuyện, tóm tắt 20 tin nhắn gần nhất, /tomtat, /summary).
 - **Tra Cứu Google Thời Gian Thực (SerpApi Web Search)**: Tự động phân tích câu hỏi để tra cứu thông tin thời sự, kết quả bóng đá, sự kiện nóng mới nhất trên Google và đối chiếu mốc thời gian thực tế.
 - **Hẹn Giờ & Nhắc Việc Thông Minh (Reminders & Scheduler)**: Nhận diện ngôn ngữ tự nhiên tiếng Việt chuẩn xác (`nhắc anh 10 phút nữa...`, `nhắc em mai 8h sáng...`, `/remind 15:30 họp phòng ban`). Hỗ trợ hàng đợi thời gian thực trên **Upstash Redis Delay Queue**, tự động réo chuông thông báo đúng giờ qua **Vercel Cron** (`/api/reminder-cron`). Có lệnh xem danh sách (`/reminders`) và hủy nhắc hẹn (`/huynhac`).
 - **Tạo Ảnh & Vẽ Tranh AI (Text-to-Image)**: Tự động nhận diện yêu cầu vẽ tranh tiếng Việt (`vẽ...` hoặc `/draw...`), tối ưu hóa prompt qua Gemini và tạo tác phẩm nghệ thuật 8K sắc nét (mô hình Flux) gửi trực tiếp vào nhóm Zalo.
@@ -125,7 +125,7 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 
 ---
 
-### 📸 Cài Đặt Ảnh Đại Diện Bot Từ Thư Mục Google Drive (Tự Động Random)
+### Cài Đặt Ảnh Đại Diện Bot Từ Thư Mục Google Drive (Tự Động Random)
 
 Bạn **KHÔNG CẦN dán từng link ảnh**! Bạn có thể dán nguyên **link 1 thư mục (Folder) Google Drive**, bot sẽ tự động quét toàn bộ ảnh trong đó và random mỗi lần được hỏi:
 
@@ -142,10 +142,10 @@ Bạn **KHÔNG CẦN dán từng link ảnh**! Bạn có thể dán nguyên **li
      ```
    - *(Hoặc bạn cũng có thể dùng biến riêng: `GOOGLE_DRIVE_FOLDER_URL=https://drive.google.com/drive/folders/...`)*
 5. **Cách Bot Hoạt Động:**
-   - ✨ **Tự động nhận diện:** Bot phát hiện link folder, tự nạp tất cả file ảnh mà **KHÔNG CẦN API Key hay OAuth**.
-   - 🎲 **Random thông minh:** Mỗi khi thành viên hỏi *"cho xem ảnh bot"*, *"xem mặt em"*, *"ảnh khác đi"*, bot sẽ bốc ngẫu nhiên 1 ảnh (đảm bảo không bị trùng 2 lần liên tiếp).
-   - ⚡ **Tốc độ cao:** Ảnh được nạp qua Google Direct CDN (`lh3.googleusercontent.com/d/ID`), gửi ảnh nhị phân trực tiếp đến Zalo.
-   - 🔄 **Thêm ảnh không cần sửa code:** Khi muốn thêm ảnh mới, bạn chỉ cần ném thêm ảnh vào folder Drive trên điện thoại/máy tính, bot sẽ tự động cập nhật!
+   - **Tự động nhận diện:** Bot phát hiện link folder, tự nạp tất cả file ảnh mà **KHÔNG CẦN API Key hay OAuth**.
+   - **Random thông minh:** Mỗi khi thành viên hỏi *"cho xem ảnh bot"*, *"xem mặt em"*, *"ảnh khác đi"*, bot sẽ bốc ngẫu nhiên 1 ảnh (đảm bảo không bị trùng 2 lần liên tiếp).
+   - **Tốc độ cao:** Ảnh được nạp qua Google Direct CDN (`lh3.googleusercontent.com/d/ID`), gửi ảnh nhị phân trực tiếp đến Zalo.
+   - **Thêm ảnh không cần sửa code:** Khi muốn thêm ảnh mới, bạn chỉ cần ném thêm ảnh vào folder Drive trên điện thoại/máy tính, bot sẽ tự động cập nhật!
 
 ---
 
