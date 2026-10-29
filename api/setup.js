@@ -8,6 +8,7 @@ const botService = require('./bot-service');
 const geminiService = require('./gemini-service');
 const memoryService = require('./memory-service');
 const avatarService = require('./avatar-service');
+const reminderService = require('./reminder-service');
 
 module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
@@ -63,6 +64,19 @@ module.exports = async function handler(req, res) {
       case 'test_webhook': {
         const result = await botService.testWebhook(token);
         return res.status(200).json({ ok: true, data: result });
+      }
+
+      case 'debug_reminder': {
+        const codeSnippet = reminderService.checkAndTriggerReminders.toString();
+        const resolveSnippet = reminderService.resolvePerson.toString();
+        const testPerson = reminderService.resolvePerson('Mai Quang Huy', 'Mai Quang Huy', 'giải lao');
+        return res.status(200).json({
+          ok: true,
+          testPerson,
+          hasResolvePersonInTrigger: codeSnippet.includes('resolvePerson'),
+          triggerCode: codeSnippet.slice(codeSnippet.indexOf('triggerMessage'), codeSnippet.indexOf('triggerMessage') + 400),
+          resolveCode: resolveSnippet.slice(0, 400)
+        });
       }
 
       case 'send_chat_action': {
