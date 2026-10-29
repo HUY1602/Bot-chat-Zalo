@@ -214,11 +214,43 @@ async function sendPhoto(chatId, photoUrl, caption = '', replyToMsgId = null, to
   }
 }
 
+/**
+ * Send chat action (e.g. typing indicator) to a user or group on Zalo
+ * Displays "[Bot Name] đang soạn tin ..." in the chat while the bot processes
+ * @param {string|number} chatId 
+ * @param {string} action - 'typing' or 'upload_photo'
+ * @param {string} token 
+ */
+async function sendChatAction(chatId, action = 'typing', token = process.env.ZALO_BOT_TOKEN) {
+  if (!token) throw new Error('ZALO_BOT_TOKEN is not defined');
+  if (!chatId) throw new Error('chat_id is required');
+
+  const endpoint = `${ZALO_API_BASE}${token}/sendChatAction`;
+  const body = {
+    chat_id: String(chatId),
+    action: String(action)
+  };
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.warn(`[sendChatAction Error] chatId ${chatId}:`, err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
 module.exports = {
   getBotInfo,
   setWebhook,
   testWebhook,
   sendMessage,
   sendPhoto,
+  sendChatAction,
   splitMessage
 };

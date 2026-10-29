@@ -281,6 +281,30 @@ module.exports = async function handler(req, res) {
     processedMessageIds.set(msgId, Date.now());
   }
 
+  // Quản lý hiển thị trạng thái "đang soạn tin..." (Typing indicator) trên Zalo
+  let typingTimer = null;
+  const startTyping = () => {
+    botService.sendChatAction(chatId, 'typing').catch(err => {
+      console.warn('[sendChatAction Error]:', err.message);
+    });
+    // Zalo tự tắt trạng thái sau ~5s, tự động refresh mỗi 4s nếu tác vụ suy nghĩ kéo dài
+    if (!typingTimer) {
+      typingTimer = setInterval(() => {
+        botService.sendChatAction(chatId, 'typing').catch(() => {});
+      }, 4000);
+    }
+  };
+
+  const stopTyping = () => {
+    if (typingTimer) {
+      clearInterval(typingTimer);
+      typingTimer = null;
+    }
+  };
+
+  // Kích hoạt ngay lập tức để người dùng thấy bot đang soạn tin
+  startTyping();
+
   // Extract image and quoted message context (Vision & Contextual Reply)
   const { imageUrl, quoteText } = extractImageAndQuote(payload, event, message);
   let imageBuffer = null;
@@ -562,5 +586,7 @@ module.exports = async function handler(req, res) {
 
     // Luôn trả về 200 để Zalo không retry vô tận
     return res.status(200).json({ ok: false, error: err.message });
+  } finally {
+    stopTyping();
   }
 };

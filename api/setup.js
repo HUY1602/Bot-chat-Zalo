@@ -64,6 +64,15 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({ ok: true, data: result });
       }
 
+      case 'send_chat_action': {
+        const { chatId: targetChatId, chatAction = 'typing' } = req.body || {};
+        if (!targetChatId) {
+          return res.status(400).json({ ok: false, error: 'Thiếu tham số chatId' });
+        }
+        const result = await botService.sendChatAction(targetChatId, chatAction, token);
+        return res.status(200).json({ ok: true, data: result });
+      }
+
       case 'test_gemini': {
         const prompt = testPrompt || 'Xin chào! Hãy giới thiệu bạn là ai trong 2 câu ngắn gọn.';
         const answer = await geminiService.generateAnswer(prompt, { apiKey: geminiKey });
