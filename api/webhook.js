@@ -36,18 +36,19 @@ function cleanMention(rawText) {
   // 1. Remove Zalo encoded mention tags like [@oa_id] or [@user_id]
   cleaned = cleaned.replace(/\[@[^\]]+\]\s*/g, '');
 
-  // 2. Remove known bot names / aliases (with or without leading @)
-  cleaned = cleaned.replace(/^@?Bot\s*bi[eể]n\s*n[eè]\s*/i, '');
-  cleaned = cleaned.replace(/^@?Bọt\s*biển\s*(cute)?\s*/i, '');
-  cleaned = cleaned.replace(/^@?Bot\s+Vạn\s+Năng\s*/i, '');
-  cleaned = cleaned.replace(/^@?bot\.UOOvNGDv\s*/i, '');
+  // 2. Remove known bot names / aliases anywhere in text (with or without @)
+  cleaned = cleaned.replace(/@?Bot\s*bi[eể]n\s*n[eè]\b/gi, '');
+  cleaned = cleaned.replace(/@?Bọt\s*biển\s*(?:cute)?\b/gi, '');
+  cleaned = cleaned.replace(/@?Bot\s+Vạn\s+Năng\b/gi, '');
+  cleaned = cleaned.replace(/@?bot\.UOOvNGDv\b/gi, '');
 
-  // 3. Remove any leading @mention tag (e.g. "@Bot bien ne bạn là ai" -> "bạn là ai")
+  // 3. Remove any remaining @mention tag (e.g. "@Bot bien ne bạn là ai" -> "bạn là ai")
   cleaned = cleaned.replace(/^@[^:\n,?!]+?(\s+(?=[a-z\p{L}0-9/?!])|$)/iu, '');
   cleaned = cleaned.replace(/^@\S+\s*/i, '');
+  cleaned = cleaned.replace(/\s*@\S+$/i, '');
 
-  // 4. Strip leading punctuation or whitespace left after mention (e.g. ": ", ", ", "- ")
-  cleaned = cleaned.replace(/^[:,\-\s]+/, '');
+  // 4. Strip leading/trailing punctuation or whitespace left after mention
+  cleaned = cleaned.replace(/^[:,\-\s]+/, '').replace(/[:,\-\s]+$/, '');
 
   return cleaned.trim();
 }
@@ -239,7 +240,8 @@ module.exports = async function handler(req, res) {
           targetName: parseResult.targetName,
           task: parseResult.task,
           scheduledTime: parseResult.scheduledTime,
-          timeFormatted: parseResult.timeFormatted
+          timeFormatted: parseResult.timeFormatted,
+          msgId
         });
 
         const confirmMsg = reminderService.buildConfirmationMessage(reminder);

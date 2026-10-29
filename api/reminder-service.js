@@ -229,6 +229,13 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
   if (!rawText) return { ok: false, error: 'Tin nhắn rỗng' };
   let text = rawText.trim();
 
+  // Bỏ các mention bot còn sót lại bất kỳ đâu trong câu
+  text = text.replace(/@?Bot\s*bi[eể]n\s*n[eè]\b/gi, '');
+  text = text.replace(/@?Bọt\s*biển\s*(?:cute)?\b/gi, '');
+  text = text.replace(/@?Bot\s+Vạn\s+Năng\b/gi, '');
+  text = text.replace(/@?bot\.UOOvNGDv\b/gi, '');
+  text = text.replace(/\s*@\S+$/gi, '').trim();
+
   // Bỏ lệnh slash nếu có (/remind, /nhac, /hengio...)
   text = text.replace(/^\/(?:remind|hengio|nhac|hen|reminder)\s+/i, '');
 
@@ -397,16 +404,25 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
     task = task.replace(new RegExp(`\\b${targetNameToRemove}\\b`, 'i'), ' ');
   }
 
+  // Dọn dẹp khoảng trắng trước khi lọc tiền tố
+  task = task.trim();
+
   // Bỏ các từ mào đầu và đại từ
   task = task.replace(/^(?:bot\s+|em\s+|bọt biển\s+ơi\s+|ơi\s+)?(?:nhắc|hẹn giờ|đặt lịch|báo thức)\s+/i, '');
   task = task.replace(/^(?:cho\s+)?(?:cả\s+nhóm|nhóm|anh|chị|em|tôi|mình)\s+/i, '');
   task = task.replace(/^(?:bọt biển\s+ơi\s+|em\s+ơi\s+|bot\s+ơi\s+|ơi\s+)/i, '');
+  // Tiếp tục bỏ từ 'nhắc' nếu vẫn còn đứng đầu sau khi loại bỏ đại từ
+  task = task.replace(/^nhắc\s+/i, '');
   task = task.replace(/\b(?:lúc|vào lúc|nữa|hôm nay|ngày mai|sáng mai|chiều mai|tối mai|chiều nay|tối nay|sáng nay|ngày mốt|mốt|mai|hôm|nay)\b/gi, ' ');
   task = task.replace(/\b(?:nhớ|hãy|giúp|hộ|với|nhé|nha|ạ|đi|nhá|nghen|xem)\b/gi, ' ');
+  // Bỏ bất kỳ mention bot nào còn sót lại trong task
+  task = task.replace(/@?Bot\s*bi[eể]n\s*n[eè]\b/gi, '');
+  task = task.replace(/@?Bọt\s*biển\s*(?:cute)?\b/gi, '');
+  task = task.replace(/@?Bot\s+Vạn\s+Năng\b/gi, '');
+  task = task.replace(/\s*@\S+$/gi, '');
   task = task.replace(/\s{2,}/g, ' ');
-  task = task.replace(/^[:,\-\s]+/, '').replace(/[:,\-\s]+$/, '').trim();
+  task = task.replace(/^[:\-,\s]+/, '').replace(/[:\-,\s]+$/, '').trim();
 
-  // Nếu sau khi lọc mà task bị rỗng, đặt mặc định
   if (!task || task.length < 2) {
     task = 'Công việc đã hẹn giờ';
   }
@@ -510,7 +526,7 @@ async function parseReminder(text, senderName = 'Anh/Chị') {
  * @param {object} params
  * @returns {Promise<object>}
  */
-async function createReminder({ chatId, senderName, userId, targetName, task, scheduledTime, timeFormatted }) {
+async function createReminder({ chatId, senderName, userId, targetName, task, scheduledTime, timeFormatted, msgId }) {
   const id = `remind_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const reminder = {
     id,
@@ -521,6 +537,7 @@ async function createReminder({ chatId, senderName, userId, targetName, task, sc
     task,
     scheduledTime,
     timeFormatted: timeFormatted || formatTimeVN(scheduledTime),
+    msgId: msgId ? String(msgId) : null,
     createdAt: Date.now()
   };
 
@@ -694,21 +711,16 @@ async function checkAndTriggerReminders() {
     }
 
     if (reminder && reminder.chatId) {
-      // Tạo cú pháp mention Zalo: [@user_id] để tag trực tiếp vào Zalo người nhận
-      let mentionText = reminder.targetName;
-      if (reminder.targetName === 'cả nhóm mình') {
-        mentionText = 'cả nhóm mình';
-      } else if (reminder.userId) {
-        mentionText = `[@${reminder.userId}]`;
-      } else {
-        mentionText = reminder.targetName.startsWith('@') ? reminder.targetName : `@${reminder.targetName}`;
-      }
+      const pronoun = getPronoun(reminder.targetName, reminder.senderName);
+      const mentionText = formatMentionName(reminder.targetName);
+      const actionPronoun = pronoun === 'cả nhóm' ? 'cả nhóm' : pronoun;
 
       // Tạo tin nhắn nhắc nhở ngọt ngào từ Bọt biển
-      const triggerMessage = `⏰ RENG RENG RENG! Đến giờ rồi nè ${mentionText} ơi! 🫧🔔\n\n📌 Lời nhắc: ${reminder.task}\n🕒 Đã hẹn: ${reminder.timeFormatted}\n\nEm nhắc đúng giờ rồi nha, anh/chị nhớ làm liền nghen! Đừng quên đó nè 🥰✨`;
+      const triggerMessage = `⏰ RENG RENG RENG! Đến giờ rồi nè ${mentionText} ơi! 🫧🔔\n\n📌 Lời nhắc: ${reminder.task}\n🕒 Đã hẹn: ${reminder.timeFormatted}\n\nEm nhắc đúng giờ rồi nha, ${actionPronoun} nhớ làm liền nghen! Đừng quên đó nè 🥰✨`;
 
       try {
-        await botService.sendMessage(reminder.chatId, triggerMessage);
+        // Gửi tin nhắn có reply_to_message_id trích dẫn tin nhắn hẹn ban đầu để Zalo phát chuông ping người dùng
+        await botService.sendMessage(reminder.chatId, triggerMessage, reminder.msgId || null);
         console.log(`[Reminder Sent] Đã gửi thông báo hẹn giờ tới chat ${reminder.chatId}: "${reminder.task}"`);
         triggered.push(reminder);
       } catch (sendErr) {
@@ -738,12 +750,59 @@ async function checkAndTriggerReminders() {
 }
 
 /**
+ * Lấy đại từ xưng hô phù hợp dựa trên đối tượng hoặc người gửi
+ * @param {string} targetName 
+ * @param {string} senderName 
+ * @returns {string} 'anh' | 'chị' | 'em' | 'cả nhóm' | 'anh/chị'
+ */
+function getPronoun(targetName = '', senderName = '') {
+  const combined = `${targetName} ${senderName}`.toLowerCase();
+  if (/\b(?:cả\s*nhóm|nhóm|mọi\s*người|mng|cả\s*nhà)\b/i.test(combined)) {
+    return 'cả nhóm';
+  }
+  if (/\b(?:anh|a)\b/i.test(targetName)) {
+    return 'anh';
+  }
+  if (/\b(?:chị|chi|c)\b/i.test(targetName)) {
+    return 'chị';
+  }
+  if (/\b(?:em|bé)\b/i.test(targetName)) {
+    return 'em';
+  }
+  return 'anh/chị';
+}
+
+/**
+ * Xây dựng chuỗi gọi tên / mention chuẩn đẹp cho Zalo
+ * @param {string} targetName 
+ * @returns {string}
+ */
+function formatMentionName(targetName = '') {
+  if (!targetName || targetName === 'cả nhóm mình' || targetName === 'cả nhóm') {
+    return '@cả nhóm';
+  }
+  let name = targetName.trim();
+  if (name.includes('@')) return name;
+  if (/^(?:anh|chị|em)\s+/i.test(name)) {
+    return name.replace(/^((?:anh|chị|em)\s+)(.+)$/i, '$1@$2');
+  }
+  return `@${name}`;
+}
+
+/**
  * Tạo câu trả lời xác nhận đặt lịch dễ thương cho Bọt biển
  * @param {object} reminder 
  * @returns {string}
  */
 function buildConfirmationMessage(reminder) {
-  return `Dạ Bọt biển đã ghi nhớ lịch nhắc rồi nè ${reminder.senderName} ơi! ⏰✨\n\n📌 Việc cần nhắc: ${reminder.task}\n🕒 Thời gian nhắc: ${reminder.timeFormatted} (${formatRelativeTime(reminder.scheduledTime - Date.now())})\n👤 Đối tượng: ${reminder.targetName}\n\n🫧 Đến đúng giờ em sẽ réo chuông nhắc anh/chị liền nha! 🥰`;
+  const pronoun = getPronoun(reminder.targetName, reminder.senderName);
+  let greetingName = reminder.targetName;
+  if (!greetingName || greetingName === 'cả nhóm mình' || greetingName === 'cả nhóm') {
+    greetingName = reminder.senderName || 'cả nhóm';
+  }
+  const actionPronoun = pronoun === 'cả nhóm' ? 'cả nhóm' : pronoun;
+
+  return `Dạ Bọt biển đã ghi nhớ lịch nhắc rồi nè ${greetingName} ơi! ⏰✨\n\n📌 Việc cần nhắc: ${reminder.task}\n🕒 Thời gian nhắc: ${reminder.timeFormatted} (${formatRelativeTime(reminder.scheduledTime - Date.now())})\n👤 Đối tượng: ${reminder.targetName}\n\n🫧 Đến đúng giờ em sẽ réo chuông nhắc ${actionPronoun} liền nha! 🥰`;
 }
 
 module.exports = {
