@@ -123,9 +123,10 @@ function formatForZalo(text) {
     .replace(/-{3,}/g, '')
     // Replace markdown links [text](url) -> text (url)
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
-    // Safety cleanup: Strip any leaked search header tags
+    // Safety cleanup: Strip any leaked search or system time header tags
     .replace(/^---?\s*DỮ LIỆU[^-\n]*---?\s*/gim, '')
     .replace(/\[DỮ LIỆU TÌM KIẾM[^\]]*\]:?\s*/gi, '')
+    .replace(/\[THỜI GIAN THỰC TẾ[^\]]*\]:?\s*/gi, '')
     // Safety replacements: replace obsolete bot names if model slips
     .replace(/Trợ lý AI Zalo/gi, 'Bọt biển cute')
     .replace(/Em Trợ Lý/gi, 'Bọt biển cute')
@@ -231,25 +232,44 @@ async function callGeminiRest(model, promptOrContents, apiKey, systemInstruction
 }
 
 /**
- * Lấy chuỗi thời gian thực tế theo múi giờ Việt Nam (GMT+7)
- * @returns {string}
+ * Lấy chuỗi thời gian thực tế theo múi giờ Việt Nam (GMT+7) chuẩn xác và ổn định
+ * @param {Date} [date]
+ * @returns {string} Ví dụ: "07:55, Thứ Năm ngày 29/10/2026"
  */
-function getVietnamTimeString() {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('vi-VN', {
+function getVietnamTimeString(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Ho_Chi_Minh',
-    weekday: 'long',
     year: 'numeric',
     month: 'numeric',
-    day: 'numeric'
-  });
-  const timeStr = now.toLocaleTimeString('vi-VN', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-    hour: '2-digit',
-    minute: '2-digit',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    weekday: 'short',
     hour12: false
   });
-  return `${dateStr}, lúc ${timeStr}`;
+  const parts = formatter.formatToParts(date);
+  const m = {};
+  for (const p of parts) m[p.type] = p.value;
+
+  const weekdayMap = {
+    'Sun': 'Chủ Nhật',
+    'Mon': 'Thứ Hai',
+    'Tue': 'Thứ Ba',
+    'Wed': 'Thứ Tư',
+    'Thu': 'Thứ Năm',
+    'Fri': 'Thứ Sáu',
+    'Sat': 'Thứ Bảy'
+  };
+
+  const dayName = weekdayMap[m.weekday] || 'Thứ Năm';
+  const dd = String(m.day).padStart(2, '0');
+  const mm = String(m.month).padStart(2, '0');
+  const yyyy = m.year;
+  const HH = String(m.hour).padStart(2, '0');
+  const MM = String(m.minute).padStart(2, '0');
+
+  return `${HH}:${MM}, ${dayName} ngày ${dd}/${mm}/${yyyy}`;
 }
 
 /**
@@ -272,8 +292,12 @@ async function generateAnswer(prompt, options = {}) {
   const timeContext = `\n\nTHỜI GIAN THỰC HIỆN TẠI:\n• Bây giờ là: ${currentTime} (Múi giờ Việt Nam - GMT+7).\n• Bạn luôn nhận thức chuẩn xác về ngày, tháng, năm và giờ phút hiện tại. Tuyệt đối không nói dữ liệu dừng lại ở năm 2024 hay từ chối trả lời về thời gian!`;
   const systemInstruction = baseInstruction + timeContext;
 
+  // Neo thời gian thực tế vào prompt lượt này để tránh LLM bị "neo tư duy" theo mốc ngày cũ trong lịch sử chat
+  const timeAnchor = `[THỜI GIAN THỰC TẾ HIỆN TẠI: ${currentTime} (Múi giờ Việt Nam GMT+7). LƯU Ý QUAN TRỌNG: Lịch sử trò chuyện trước đó diễn ra vào ngày cũ trong quá khứ. Tuyệt đối KHÔNG lấy thời gian/ngày tháng từ lịch sử cũ để trả lời! BẮT BUỘC trả lời và xác định thời điểm hiện tại chính xác 100% theo mốc thời gian thực tế này!]\n`;
+  const promptWithTimeAnchor = `${timeAnchor}${prompt}`;
+
   // Prepare multi-turn contents if history exists
-  const contents = prepareContents(prompt, options.history);
+  const contents = prepareContents(promptWithTimeAnchor, options.history);
 
   // Try configured model first
   try {
