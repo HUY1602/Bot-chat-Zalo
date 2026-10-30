@@ -245,6 +245,42 @@ async function sendChatAction(chatId, action = 'typing', token = process.env.ZAL
   }
 }
 
+/**
+ * Send sticker to a user or group on Zalo
+ * @param {string|number} chatId 
+ * @param {string} stickerId - Zalo sticker ID (e.g. from sticker store)
+ * @param {string|number} replyToMsgId 
+ * @param {string} token 
+ */
+async function sendSticker(chatId, stickerId, replyToMsgId = null, token = process.env.ZALO_BOT_TOKEN) {
+  if (!token) throw new Error('ZALO_BOT_TOKEN is not defined');
+  if (!chatId) throw new Error('chat_id is required');
+  if (!stickerId) throw new Error('sticker is required');
+
+  const endpoint = `${ZALO_API_BASE}${token}/sendSticker`;
+  const body = {
+    chat_id: String(chatId),
+    sticker: String(stickerId)
+  };
+
+  if (replyToMsgId) {
+    body.reply_to_message_id = String(replyToMsgId);
+  }
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error('Error sending sticker:', err);
+    return { ok: false, error: err.message };
+  }
+}
+
 module.exports = {
   getBotInfo,
   setWebhook,
@@ -252,5 +288,6 @@ module.exports = {
   sendMessage,
   sendPhoto,
   sendChatAction,
+  sendSticker,
   splitMessage
 };

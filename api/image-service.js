@@ -131,7 +131,7 @@ function buildImageUrl(prompt, options = {}) {
  * @param {string} senderName - Tên người gửi
  * @returns {Promise<{ imageUrl: string, rawPrompt: string, enhancedPrompt: string, caption: string }>}
  */
-async function generateArtwork(userQuery, senderName = 'anh/chị') {
+async function generateArtwork(userQuery, senderName = 'anh') {
   const rawPrompt = extractDrawPrompt(userQuery);
   console.log(`[Image Service] Prompt gốc từ ${senderName}: "${rawPrompt}"`);
 
@@ -142,7 +142,7 @@ async function generateArtwork(userQuery, senderName = 'anh/chị') {
   // Tạo URL ảnh từ Pollinations AI
   const imageUrl = buildImageUrl(enhancedPrompt);
 
-  const name = senderName && senderName !== 'Thành viên' ? senderName : 'anh/chị';
+  const name = senderName && senderName !== 'Thành viên' ? senderName : 'anh';
   const caption = `Dạ tranh của ${name} đây nè! 🎨✨\n\n🖼️ Yêu cầu: "${rawPrompt}"\n🫧 Bọt biển vẽ cho ${name} có đẹp không nè? 🥰`;
 
   return {

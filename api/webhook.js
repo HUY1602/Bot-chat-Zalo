@@ -319,7 +319,7 @@ module.exports = async function handler(req, res) {
   // Process text message
   let userQuery = cleanMention(rawText);
   if (!userQuery && imageBuffer) {
-    userQuery = 'Hãy quan sát kỹ bức ảnh này và mô tả, phân tích hoặc nhận xét chi tiết giúp anh/chị nhé!';
+    userQuery = 'Hãy quan sát kỹ bức ảnh này và mô tả, phân tích hoặc nhận xét chi tiết giúp anh nhé!';
   }
   console.log(`[Chat ${chatId} (${chatType})] Từ ${senderName}: "${rawText}" -> Câu hỏi: "${userQuery}"${imageUrl ? ' [KÈM ẢNH]' : ''}`);
 
@@ -327,14 +327,14 @@ module.exports = async function handler(req, res) {
     // 0. Built-in command: /reset, /clear hoặc /forget (xóa bộ nhớ trò chuyện)
     if (userQuery === '/reset' || userQuery === '/clear' || userQuery === '/forget' || userQuery === '/quen') {
       await memoryService.clearHistory(chatId);
-      const resetText = `Dạ em đã làm mới bộ nhớ của nhóm mình rồi nè anh/chị ơi! Giờ tụi mình bắt đầu câu chuyện mới nghen 🫧✨`;
+      const resetText = `Dạ em đã làm mới bộ nhớ của nhóm mình rồi nè anh ơi! Giờ tụi mình bắt đầu câu chuyện mới nghen 🫧✨`;
       await botService.sendMessage(chatId, resetText, msgId);
       return res.status(200).json({ ok: true });
     }
 
     // 1. Built-in command: /start hoặc /help
     if (userQuery === '/start' || userQuery === '/help' || userQuery === '!help') {
-      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh/chị cần gì cứ hỏi em nha!\n\n📌 Các tính năng của em:\n• Hỏi đáp thông minh: Gõ @tên_bot kèm câu hỏi hoặc Reply tin nhắn của em\n• ⏰ Hẹn giờ & Nhắc việc: "nhắc anh 10 phút nữa uống nước", "nhắc em mai 8h sáng nộp báo cáo", /reminders, /huynhac\n• 📝 Tóm tắt hội thoại: "tóm tắt cuộc trò chuyện", "tóm tắt 20 tin nhắn gần nhất", /tomtat, /summary
+      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh cần gì cứ hỏi em nha!\n\n📌 Các tính năng của em:\n• Hỏi đáp thông minh: Gõ @tên_bot kèm câu hỏi hoặc Reply tin nhắn của em\n• ⏰ Hẹn giờ & Nhắc việc: "nhắc anh 10 phút nữa uống nước", "nhắc em mai 8h sáng nộp báo cáo", /reminders, /huynhac\n• 📝 Tóm tắt hội thoại: "tóm tắt cuộc trò chuyện", "tóm tắt 20 tin nhắn gần nhất", /tomtat, /summary
 • 🎨 Vẽ tranh AI: Gõ "vẽ + mô tả" (ví dụ: vẽ chú mèo phi hành gia) hoặc "/draw ..."\n• 📸 Xem ảnh của em: Gõ "cho xem ảnh bot", "xem mặt bot"\n• /ping: Kiểm tra bot còn hoạt động không\n• /reset: Làm mới bộ nhớ trò chuyện\n• /help: Xem lại hướng dẫn này`;
       await botService.sendMessage(chatId, helpText, msgId);
       return res.status(200).json({ ok: true });
@@ -352,7 +352,7 @@ module.exports = async function handler(req, res) {
     if (reminderService.isListRemindersRequest(userQuery)) {
       const reminders = await reminderService.listReminders(chatId);
       if (reminders.length === 0) {
-        const noRemindText = `Dạ hiện tại nhóm mình chưa có lịch hẹn hay nhắc việc nào đang chờ nè ${senderName} ơi! ⏰✨\n\nAnh/chị có thể nhắn ví dụ: "nhắc anh 15 phút nữa nộp báo cáo" để em ghi nhớ nha! 🥰`;
+        const noRemindText = `Dạ hiện tại nhóm mình chưa có lịch hẹn hay nhắc việc nào đang chờ nè ${senderName} ơi! ⏰✨\n\nanh có thể nhắn ví dụ: "nhắc anh 15 phút nữa nộp báo cáo" để em ghi nhớ nha! 🥰`;
         await botService.sendMessage(chatId, noRemindText, msgId);
       } else {
         const listItems = reminders.map((r, i) => {
@@ -361,7 +361,7 @@ module.exports = async function handler(req, res) {
           return `${i + 1}. 📌 **${r.task}**\n   🕒 ${r.timeFormatted} (${relStr})\n   👤 Nhắc: ${r.targetName}\n   🔑 ID: ${r.id}`;
         }).join('\n\n');
 
-        const listText = `⏰ DANH SÁCH NHẮC VIỆC ĐANG CHỜ CỦA NHÓM NÈ:\n\n${listItems}\n\n💡 Để hủy nhắc việc, anh/chị gõ: /huynhac [ID] hoặc /huynhac all (hủy tất cả)`;
+        const listText = `⏰ DANH SÁCH NHẮC VIỆC ĐANG CHỜ CỦA NHÓM NÈ:\n\n${listItems}\n\n💡 Để hủy nhắc việc, anh gõ: /huynhac [ID] hoặc /huynhac all (hủy tất cả)`;
         await botService.sendMessage(chatId, listText, msgId);
       }
       return res.status(200).json({ ok: true, action: 'listReminders' });
@@ -420,7 +420,7 @@ module.exports = async function handler(req, res) {
 
         return res.status(200).json({ ok: true, action: 'createReminder', reminderId: reminder.id });
       } else {
-        const guideText = `Ui, ${senderName} ơi, em chưa hiểu rõ thời gian anh/chị muốn hẹn nè 🥺\n\nAnh/chị có thể nhắn rõ hơn, ví dụ:\n• "nhắc anh 10 phút nữa uống nước"\n• "nhắc em mai 8h sáng nộp báo cáo"\n• "nhắc nhóm 15h30 chiều nay họp"\n• Hoặc dùng lệnh: /remind 15m đi ăn cơm`;
+        const guideText = `Ui, ${senderName} ơi, em chưa hiểu rõ thời gian anh muốn hẹn nè 🥺\n\nanh có thể nhắn rõ hơn, ví dụ:\n• "nhắc anh 10 phút nữa uống nước"\n• "nhắc em mai 8h sáng nộp báo cáo"\n• "nhắc nhóm 15h30 chiều nay họp"\n• Hoặc dùng lệnh: /remind 15m đi ăn cơm`;
         await botService.sendMessage(chatId, guideText, msgId);
         return res.status(200).json({ ok: false, error: 'Could not parse reminder time' });
       }
@@ -449,7 +449,7 @@ module.exports = async function handler(req, res) {
         console.error('Lỗi khi vẽ tranh AI:', drawErr);
         await botService.sendMessage(
           chatId,
-          `Ui, em vẽ tranh bị vướng chút trục trặc rồi ${senderName} ơi 🥺 (${drawErr.message}). Anh/chị thử lại sau một lát nha!`,
+          `Ui, em vẽ tranh bị vướng chút trục trặc rồi ${senderName} ơi 🥺 (${drawErr.message}). anh thử lại sau một lát nha!`,
           msgId
         );
         return res.status(200).json({ ok: false, error: drawErr.message });
@@ -487,7 +487,7 @@ module.exports = async function handler(req, res) {
 
     // 3. Nếu người dùng chỉ tag bot mà không hỏi gì và cũng không gửi kèm ảnh
     if (!userQuery && !imageBuffer) {
-      const emptyText = `Dạ, ${senderName} gọi em ạ? 🫧 Anh/chị cần hỏi gì hoặc gửi hình ảnh nào cho em xem cứ nhắn nha!`;
+      const emptyText = `Dạ, ${senderName} gọi em ạ? 🫧 anh cần hỏi gì hoặc gửi hình ảnh nào cho em xem cứ nhắn nha!`;
       await botService.sendMessage(chatId, emptyText, msgId);
       return res.status(200).json({ ok: true });
     }

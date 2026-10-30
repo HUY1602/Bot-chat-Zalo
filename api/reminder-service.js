@@ -93,7 +93,7 @@ function getVietnamDateTimeParts(date = new Date()) {
 }
 
 /**
- * Định dạng thời gian theo phong cách Việt Nam thân thiện
+ * Định dạng thời gian theo phong cách Việt Nam thân thiện (hỗ trợ nhiều ngày, thứ trong tuần, tháng sau)
  * @param {number|Date} timestamp
  * @returns {string}
  */
@@ -107,22 +107,31 @@ function formatTimeVN(timestamp) {
   const dd = String(vn.day).padStart(2, '0');
   const MM = String(vn.month).padStart(2, '0');
 
-  let dayLabel = `${dd}/${MM}/${vn.year}`;
-  if (vn.year === nowVn.year && vn.month === nowVn.month) {
-    if (vn.day === nowVn.day) {
-      dayLabel = 'hôm nay';
-    } else if (vn.day === nowVn.day + 1) {
-      dayLabel = 'ngày mai';
-    } else if (vn.day === nowVn.day + 2) {
-      dayLabel = 'ngày mốt';
-    }
+  const weekdays = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+  const dayOfWeek = weekdays[new Date(Date.UTC(vn.year, vn.month - 1, vn.day)).getDay()];
+
+  const targetDateOnly = new Date(Date.UTC(vn.year, vn.month - 1, vn.day));
+  const nowDateOnly = new Date(Date.UTC(nowVn.year, nowVn.month - 1, nowVn.day));
+  const diffDays = Math.round((targetDateOnly - nowDateOnly) / (86400 * 1000));
+
+  let dayLabel = `${dayOfWeek}, ${dd}/${MM}/${vn.year}`;
+  if (diffDays === 0) {
+    dayLabel = 'hôm nay';
+  } else if (diffDays === 1) {
+    dayLabel = 'ngày mai';
+  } else if (diffDays === 2) {
+    dayLabel = `ngày mốt (${dayOfWeek}, ${dd}/${MM})`;
+  } else if (diffDays > 2 && diffDays <= 7) {
+    dayLabel = `${dayOfWeek} (${dd}/${MM})`;
+  } else {
+    dayLabel = `${dayOfWeek}, ${dd}/${MM}/${vn.year}`;
   }
 
   return `${hh}:${mm} (${dayLabel})`;
 }
 
 /**
- * Định dạng khoảng cách thời gian từ hiện tại
+ * Định dạng khoảng cách thời gian từ hiện tại (hỗ trợ giây, phút, tiếng, ngày)
  * @param {number} diffMs
  * @returns {string}
  */
@@ -136,12 +145,24 @@ function formatRelativeTime(diffMs) {
   if (totalMinutes < 60) {
     return `${totalMinutes} phút nữa`;
   }
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (minutes === 0) {
-    return `${hours} tiếng nữa`;
+  const totalHours = Math.floor(totalMinutes / 60);
+  const remMinutes = totalMinutes % 60;
+  if (totalHours < 24) {
+    if (remMinutes === 0) return `${totalHours} tiếng nữa`;
+    return `${totalHours} tiếng ${remMinutes} phút nữa`;
   }
-  return `${hours} tiếng ${minutes} phút nữa`;
+  const days = Math.floor(totalHours / 24);
+  const remHours = totalHours % 24;
+  if (remHours === 0 && remMinutes === 0) {
+    return `${days} ngày nữa`;
+  }
+  if (remHours === 0) {
+    return `${days} ngày ${remMinutes} phút nữa`;
+  }
+  if (remMinutes === 0) {
+    return `${days} ngày ${remHours} tiếng nữa`;
+  }
+  return `${days} ngày ${remHours} tiếng nữa`;
 }
 
 /**
@@ -222,12 +243,154 @@ function isCancelReminderRequest(text) {
 }
 
 /**
+ * Trích xuất thông tin ngày (cụ thể, thứ trong tuần, hoặc tương đối) từ tin nhắn
+ * @param {string} text 
+ * @param {object} nowVn 
+ * @returns {{ year: number, month: number, day: number, hasExplicitDate: boolean, matchedDateTokens: string[] }}
+ */
+function parseDateTimeInfo(text, nowVn) {
+  let targetYear = nowVn.year;
+  let targetMonth = null;
+  let targetDay = null;
+  const matchedDateTokens = [];
+
+  // Dạng trong ngoặc: (1/11), (ngày 1/11), (01/11/2026), (1-11)
+  const parenDateMatch = text.match(/\((?:ngày\s+)?(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{4}))?\)/i);
+  if (parenDateMatch) {
+    targetDay = parseInt(parenDateMatch[1], 10);
+    targetMonth = parseInt(parenDateMatch[2], 10);
+    if (parenDateMatch[3]) targetYear = parseInt(parenDateMatch[3], 10);
+    matchedDateTokens.push(parenDateMatch[0]);
+  }
+
+  // Dạng: ngày 1 tháng 11 hoặc mùng 1 tháng 11
+  if (!targetDay) {
+    const textDateMatch = text.match(/\b(?:ngày|ngay|mùng|mung|mồng|mong)\s*(\d{1,2})\s*(?:tháng|thang|\/|\-)\s*(\d{1,2})(?:\s*(?:năm|nam|\/|\-)\s*(\d{4}))?\b/i);
+    if (textDateMatch) {
+      targetDay = parseInt(textDateMatch[1], 10);
+      targetMonth = parseInt(textDateMatch[2], 10);
+      if (textDateMatch[3]) targetYear = parseInt(textDateMatch[3], 10);
+      matchedDateTokens.push(textDateMatch[0]);
+    }
+  }
+
+  // Dạng: ngày 1/11 hoặc 1/11
+  if (!targetDay) {
+    const slashDateMatch = text.match(/\b(?:ngày|ngay\s+)?(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?\b/i);
+    if (slashDateMatch) {
+      targetDay = parseInt(slashDateMatch[1], 10);
+      targetMonth = parseInt(slashDateMatch[2], 10);
+      if (slashDateMatch[3]) targetYear = parseInt(slashDateMatch[3], 10);
+      matchedDateTokens.push(slashDateMatch[0]);
+    }
+  }
+
+  // 2. Tìm thứ trong tuần: chủ nhật, thứ 2 -> thứ 7 (kèm tới, này, tuần sau...)
+  let weekdayOffset = null;
+  const weekdayMatch = text.match(/\b(chủ nhật|chu nhat|cn|thứ\s*[2-7]|thu\s*[2-7]|thứ\s*(?:hai|ba|tư|tu|năm|nam|sáu|sau|bảy|bay)|t[2-7])(?:\s*(tới|toi|này|nay|tuần\s*sau|tuan\s*sau|tuần\s*tới|tuan\s*toi|tuần\s*này|tuan\s*nay))?\b/i);
+
+  if (weekdayMatch) {
+    const rawWd = removeVietnameseTones(weekdayMatch[1]).replace(/\s+/g, '');
+    const modifier = (weekdayMatch[2] || '').toLowerCase();
+    matchedDateTokens.push(weekdayMatch[0]);
+
+    let targetWd = -1;
+    if (rawWd.includes('chunhat') || rawWd === 'cn') targetWd = 0;
+    else if (rawWd.includes('2') || rawWd.includes('hai')) targetWd = 1;
+    else if (rawWd.includes('3') || rawWd.includes('ba')) targetWd = 2;
+    else if (rawWd.includes('4') || rawWd.includes('tu')) targetWd = 3;
+    else if (rawWd.includes('5') || rawWd.includes('nam')) targetWd = 4;
+    else if (rawWd.includes('6') || rawWd.includes('sau')) targetWd = 5;
+    else if (rawWd.includes('7') || rawWd.includes('bay')) targetWd = 6;
+
+    if (targetWd !== -1) {
+      const nowWeekday = new Date(Date.UTC(nowVn.year, nowVn.month - 1, nowVn.day)).getDay();
+      let diff = (targetWd - nowWeekday + 7) % 7;
+
+      const isNextWeek = /tuần\s*(?:sau|tới)|tuan\s*(?:sau|toi)/i.test(modifier);
+      const isExplicitToi = /tới|toi/i.test(modifier);
+
+      if (diff === 0) {
+        if (isNextWeek || isExplicitToi) diff = 7;
+      }
+      weekdayOffset = diff;
+    }
+  }
+
+  // 3. Tìm từ chỉ ngày tương đối: ngày mai, ngày mốt, ngày kia, hôm nay
+  let relativeDayOffset = null;
+  const relDayMatch = text.match(/\b(?:mai|ngày mai|ngay mai|sáng mai|sang mai|chiều mai|chieu mai|tối mai|toi mai|trưa mai|trua mai|hôm sau|hom sau)\b/i);
+  if (relDayMatch) {
+    relativeDayOffset = 1;
+    matchedDateTokens.push(relDayMatch[0]);
+  } else {
+    const motMatch = text.match(/\b(?:mốt|mot|ngày mốt|ngay mot|ngày kia|ngay kia)\b/i);
+    if (motMatch) {
+      relativeDayOffset = 2;
+      matchedDateTokens.push(motMatch[0]);
+    } else {
+      const kiaMatch = text.match(/\b(?:ngày kìa|ngay kia)\b/i);
+      if (kiaMatch) {
+        relativeDayOffset = 3;
+        matchedDateTokens.push(kiaMatch[0]);
+      } else {
+        const todayMatch = text.match(/\b(?:hôm nay|hom nay|tối nay|toi nay|chiều nay|chieu nay|sáng nay|sang nay|trưa nay|trua nay)\b/i);
+        if (todayMatch) {
+          relativeDayOffset = 0;
+          matchedDateTokens.push(todayMatch[0]);
+        }
+      }
+    }
+  }
+
+  // 4. Tìm X ngày nữa
+  const daysAfterMatch = text.match(/(\d+)\s*(?:ngày|ngay)\s*(?:nữa|nua|sau)/i);
+  if (daysAfterMatch) {
+    relativeDayOffset = parseInt(daysAfterMatch[1], 10);
+    matchedDateTokens.push(daysAfterMatch[0]);
+  }
+
+  let finalYear = nowVn.year;
+  let finalMonth = nowVn.month;
+  let finalDay = nowVn.day;
+
+  if (targetDay !== null && targetMonth !== null) {
+    finalDay = targetDay;
+    finalMonth = targetMonth;
+    finalYear = targetYear;
+    const checkTarget = new Date(Date.UTC(finalYear, finalMonth - 1, finalDay));
+    const checkNow = new Date(Date.UTC(nowVn.year, nowVn.month - 1, nowVn.day));
+    if (checkTarget < checkNow && !matchedDateTokens.some(t => t.includes(String(finalYear)))) {
+      finalYear += 1;
+    }
+  } else if (weekdayOffset !== null) {
+    const targetDate = new Date(Date.UTC(nowVn.year, nowVn.month - 1, nowVn.day + weekdayOffset));
+    finalYear = targetDate.getUTCFullYear();
+    finalMonth = targetDate.getUTCMonth() + 1;
+    finalDay = targetDate.getUTCDate();
+  } else if (relativeDayOffset !== null) {
+    const targetDate = new Date(Date.UTC(nowVn.year, nowVn.month - 1, nowVn.day + relativeDayOffset));
+    finalYear = targetDate.getUTCFullYear();
+    finalMonth = targetDate.getUTCMonth() + 1;
+    finalDay = targetDate.getUTCDate();
+  }
+
+  return {
+    year: finalYear,
+    month: finalMonth,
+    day: finalDay,
+    hasExplicitDate: (targetDay !== null || weekdayOffset !== null || relativeDayOffset !== null),
+    matchedDateTokens
+  };
+}
+
+/**
  * Phân tích trích xuất thời gian và nội dung cần nhắc bằng Regex & Logic Việt Nam
  * @param {string} rawText 
  * @param {string} senderName 
  * @returns {{ ok: boolean, delayMs?: number, scheduledTime?: number, task?: string, targetName?: string, timeFormatted?: string, error?: string }}
  */
-function parseReminderFast(rawText, senderName = 'Anh/Chị') {
+function parseReminderFast(rawText, senderName = 'anh') {
   if (!rawText) return { ok: false, error: 'Tin nhắn rỗng' };
   let text = rawText.trim();
 
@@ -288,6 +451,9 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
   let scheduledTime = null;
   let matchedTimeText = '';
 
+  // Quét ngày/tháng/thứ trước
+  const dateInfo = parseDateTimeInfo(text, nowVn);
+
   // 1. Kiểm tra các dạng tiếng rưỡi / giờ rưỡi trước: "1 tiếng rưỡi nữa", "nửa tiếng nữa"
   const rưỡiMatch = text.match(/(\d+)\s*(?:tiếng|giờ)\s*(?:rưỡi|ruoi)\s*(?:nữa)?/i) ||
                     text.match(/(?:nửa|nua)\s*(?:tiếng|giờ)\s*(?:nữa)?/i);
@@ -320,7 +486,7 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
                              (['s', 'sec', 'giây', 'giay', 'm', 'p', 'min', 'mins', 'phút', 'phut'].includes(unit1) && (hasRelativeKeyword || isSlashCommand || /^(?:\d+)\s*(?:m|p|phút|phut|s|giây)/i.test(text))) ||
                              (isHourUnit && (hasRelativeKeyword || isSlashCommand));
 
-      if (isTrueRelative) {
+      if (isTrueRelative && !dateInfo.hasExplicitDate) {
         let totalMs = 0;
         if (['s', 'sec', 'giây', 'giay'].includes(unit1)) {
           totalMs = val1 * 1000;
@@ -339,27 +505,17 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
     }
   }
 
-  // 3. Dạng ngày nữa: "2 ngày nữa", "1 ngày nữa"
-  if (!scheduledTime) {
-    const dayMatch = text.match(/(\d+)\s*(?:ngày|ngay)\s*nữa/i);
-    if (dayMatch) {
-      const days = parseInt(dayMatch[1], 10);
-      delayMs = days * 86400 * 1000;
-      scheduledTime = now + delayMs;
-      matchedTimeText = dayMatch[0];
-    }
-  }
-
-  // 4. Dạng thời gian tuyệt đối trong ngày: "15:30", "15h30", "3h chiều", "3 rưỡi chiều", "8h sáng", "9 rưỡi tối"
+  // 3. Dạng thời gian tuyệt đối trong ngày: "15:30", "15h30", "3h chiều", "3 rưỡi chiều", "8h sáng", "9 rưỡi tối"...
   if (!scheduledTime) {
     const timeMatch = text.match(/(?:lúc|vào lúc)?\s*(\d{1,2})(?:h|:|\s*giờ\s*)(\d{2})?\s*(sáng|trưa|chiều|tối|đêm|am|pm)?/i) ||
                       text.match(/(?:lúc|vào lúc)?\s*(\d{1,2})\s*(?:h|giờ)?\s*(?:rưỡi|ruoi)\s*(sáng|trưa|chiều|tối|đêm|am|pm)?/i);
 
-    if (timeMatch) {
-      let hour = parseInt(timeMatch[1], 10);
-      let minute = 0;
-      let period = '';
+    let hour = 8; // Mặc định 8h sáng nếu người dùng chỉ nói ngày mà không kèm giờ
+    let minute = 0;
+    let period = '';
 
+    if (timeMatch) {
+      hour = parseInt(timeMatch[1], 10);
       if (/rưỡi|ruoi/i.test(timeMatch[0])) {
         minute = 30;
         period = (timeMatch[2] || '').toLowerCase();
@@ -367,57 +523,46 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
         minute = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
         period = (timeMatch[3] || '').toLowerCase();
       }
+      matchedTimeText = timeMatch[0];
+    } else if (!dateInfo.hasExplicitDate) {
+      return { ok: false, error: 'Chưa xác định được thời gian hẹn giờ' };
+    }
 
-      // Xử lý sáng / trưa / chiều / tối
-      if (['chiều', 'tối', 'pm'].includes(period) && hour < 12) {
-        hour += 12;
-      } else if (['sáng', 'am'].includes(period) && hour === 12) {
-        hour = 0;
-      }
+    // Xử lý sáng / trưa / chiều / tối
+    if (['chiều', 'tối', 'pm'].includes(period) && hour < 12) {
+      hour += 12;
+    } else if (['sáng', 'am'].includes(period) && hour === 12) {
+      hour = 0;
+    }
 
-      // Xác định ngày: hôm nay, ngày mai, ngày kia
-      let dayOffset = 0;
-      if (/\b(?:mai|ngày mai|sáng mai|chiều mai|tối mai)\b/i.test(text)) {
-        dayOffset = 1;
-      } else if (/\b(?:mốt|ngày mốt|ngày kia)\b/i.test(text)) {
-        dayOffset = 2;
-      }
+    // Tính timestamp chuẩn UTC của múi giờ Việt Nam GMT+7
+    let targetUtc = Date.UTC(dateInfo.year, dateInfo.month - 1, dateInfo.day, hour - 7, minute, 0, 0);
+    delayMs = targetUtc - now;
 
-      // Nếu không nói ngày, và giờ đặt bé hơn hoặc bằng giờ hiện tại hôm nay:
-      if (dayOffset === 0) {
-        const isPastToday = (hour < nowVn.hour) || (hour === nowVn.hour && minute <= nowVn.minute);
-        if (isPastToday) {
-          if (hour <= 12 && !period) {
-            // Thử phiên bản chiều/tối (+12h)
-            const pmHour = hour + 12;
-            const isPmPast = (pmHour < nowVn.hour) || (pmHour === nowVn.hour && minute <= nowVn.minute);
-            if (!isPmPast) {
-              hour = pmHour;
-            } else {
-              dayOffset = 1; // Đã qua cả giờ tối -> chuyển sang ngày mai
-            }
-          } else {
-            dayOffset = 1; // Đã qua -> ngày mai
-          }
+    // Nếu không nói ngày cụ thể và giờ hẹn hôm nay đã trôi qua:
+    if (!dateInfo.hasExplicitDate && delayMs <= 0) {
+      if (hour <= 12 && !period) {
+        // Thử phiên bản chiều/tối (+12h)
+        const pmUtc = Date.UTC(dateInfo.year, dateInfo.month - 1, dateInfo.day, (hour + 12) - 7, minute, 0, 0);
+        if (pmUtc > now) {
+          targetUtc = pmUtc;
+          delayMs = targetUtc - now;
         }
       }
-
-      // Tính chênh lệch phút
-      const targetTotalMinutes = (dayOffset * 24 + hour) * 60 + minute;
-      const currentTotalMinutes = nowVn.hour * 60 + nowVn.minute;
-      const diffMinutes = targetTotalMinutes - currentTotalMinutes;
-
-      if (diffMinutes > 0) {
-        delayMs = diffMinutes * 60 * 1000 - (nowVn.second * 1000);
-        if (delayMs < 1000) delayMs = 1000;
-        scheduledTime = now + delayMs;
-        matchedTimeText = timeMatch[0];
+      if (delayMs <= 0) {
+        // Đã qua -> tự động chuyển sang ngày mai
+        targetUtc = Date.UTC(dateInfo.year, dateInfo.month - 1, dateInfo.day + 1, hour - 7, minute, 0, 0);
+        delayMs = targetUtc - now;
       }
+    }
+
+    if (delayMs > 0) {
+      scheduledTime = targetUtc;
     }
   }
 
   if (!scheduledTime || delayMs <= 0) {
-    return { ok: false, error: 'Chưa xác định được thời gian hẹn giờ' };
+    return { ok: false, error: 'Chưa xác định được thời gian hẹn giờ hợp lệ' };
   }
 
   // Trích xuất nội dung cần nhắc (Task)
@@ -425,6 +570,10 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
   // Bỏ từ khóa thời gian đã khớp
   if (matchedTimeText) {
     task = task.replace(matchedTimeText, ' ');
+  }
+  // Bỏ tất cả các cụm từ chỉ ngày đã khớp
+  for (const token of dateInfo.matchedDateTokens) {
+    task = task.replace(token, ' ');
   }
 
   // Bỏ đối tượng đích đã trích xuất
@@ -441,7 +590,7 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
   task = task.replace(/^(?:bọt biển\s+ơi\s+|em\s+ơi\s+|bot\s+ơi\s+|ơi\s+)/i, '');
   // Tiếp tục bỏ từ 'nhắc', 'gọi', 'kêu' nếu vẫn còn đứng đầu sau khi loại bỏ đại từ
   task = task.replace(/^(?:nhắc|gọi|kêu)\s+/i, '');
-  task = task.replace(/\b(?:lúc|vào lúc|nữa|hôm nay|ngày mai|sáng mai|chiều mai|tối mai|chiều nay|tối nay|sáng nay|ngày mốt|mốt|mai|hôm|nay)\b/gi, ' ');
+  task = task.replace(/\b(?:lúc|vào lúc|vào|để|nữa|hôm nay|ngày mai|sáng mai|chiều mai|tối mai|chiều nay|tối nay|sáng nay|ngày mốt|mốt|mai|hôm|nay)\b/gi, ' ');
   task = task.replace(/\b(?:nhớ|hãy|giúp|hộ|với|nhé|nha|ạ|đi|nhá|nghen|xem)\b/gi, ' ');
   // Bỏ bất kỳ mention bot nào còn sót lại trong task
   task = task.replace(/@?Bot\s*bi[eể]n\s*n[eè]\b/gi, '');
@@ -477,7 +626,7 @@ function parseReminderFast(rawText, senderName = 'Anh/Chị') {
  * @param {string} senderName 
  * @returns {Promise<{ ok: boolean, scheduledTime?: number, task?: string, targetName?: string, timeFormatted?: string, relativeFormatted?: string }>}
  */
-async function parseReminderWithGemini(rawText, senderName = 'Anh/Chị') {
+async function parseReminderWithGemini(rawText, senderName = 'anh') {
   const now = Date.now();
   const nowVn = getVietnamDateTimeParts();
   const prompt = `Phân tích câu nói sau đây để trích xuất thông tin hẹn giờ / nhắc việc:
@@ -485,13 +634,16 @@ async function parseReminderWithGemini(rawText, senderName = 'Anh/Chị') {
 
 THỜI GIAN HIỆN TẠI (GMT+7 Việt Nam):
 - Bây giờ là: ${nowVn.hour} giờ ${nowVn.minute} phút, ngày ${nowVn.day}/${nowVn.month}/${nowVn.year} (Hôm nay).
+- Thứ trong tuần hiện tại: ${nowVn.weekday}.
 - Tên người yêu cầu: "${senderName}".
 
 YÊU CẦU:
 Trả về DUY NHẤT một chuỗi JSON hợp lệ (không kèm giải thích, không markdown code block):
 {
   "isReminder": true,
-  "delayMinutes": <số phút từ bây giờ đến lúc cần nhắc, ví dụ 10, 60, 180... Số nguyên dương lớn hơn 0>,
+  "targetDate": "YYYY-MM-DD",
+  "targetTime": "HH:mm",
+  "delayMinutes": <số phút nếu là thời gian tương đối>,
   "task": "<nội dung việc cần nhắc, viết ngắn gọn súc tích tiếng Việt>",
   "targetName": "<tên hoặc danh xưng người được nhắc, ví dụ 'anh Huy', 'chị Lan', 'cả nhóm' hoặc '${senderName}'>"
 }
@@ -507,12 +659,30 @@ Nếu câu nói KHÔNG PHẢI là yêu cầu hẹn giờ/nhắc việc, trả v�
     if (!jsonMatch) return { ok: false, error: 'Không parse được JSON từ Gemini' };
 
     const parsed = JSON.parse(jsonMatch[0]);
-    if (!parsed.isReminder || !parsed.delayMinutes || parsed.delayMinutes <= 0) {
+    if (!parsed.isReminder) {
       return { ok: false, error: 'Không phải yêu cầu nhắc việc hợp lệ' };
     }
 
-    const delayMs = Math.round(parsed.delayMinutes * 60 * 1000);
-    const scheduledTime = now + delayMs;
+    let scheduledTime = null;
+    let delayMs = 0;
+
+    if (parsed.targetDate && parsed.targetTime) {
+      const [y, m, d] = parsed.targetDate.split('-').map(Number);
+      const [hh, mm] = parsed.targetTime.split(':').map(Number);
+      if (y && m && d && !isNaN(hh) && !isNaN(mm)) {
+        scheduledTime = Date.UTC(y, m - 1, d, hh - 7, mm, 0, 0);
+        delayMs = scheduledTime - now;
+      }
+    }
+
+    if ((!scheduledTime || delayMs <= 0) && parsed.delayMinutes && parsed.delayMinutes > 0) {
+      delayMs = Math.round(parsed.delayMinutes * 60 * 1000);
+      scheduledTime = now + delayMs;
+    }
+
+    if (!scheduledTime || delayMs <= 0) {
+      return { ok: false, error: 'Thời gian nhắc đã qua hoặc không xác định được' };
+    }
 
     return {
       ok: true,
@@ -535,7 +705,7 @@ Nếu câu nói KHÔNG PHẢI là yêu cầu hẹn giờ/nhắc việc, trả v�
  * @param {string} senderName 
  * @returns {Promise<{ ok: boolean, scheduledTime?: number, task?: string, targetName?: string, timeFormatted?: string, relativeFormatted?: string, error?: string }>}
  */
-async function parseReminder(text, senderName = 'Anh/Chị') {
+async function parseReminder(text, senderName = 'anh') {
   // Thử fast regex trước
   const fastResult = parseReminderFast(text, senderName);
   if (fastResult.ok && fastResult.scheduledTime) {
@@ -550,7 +720,7 @@ async function parseReminder(text, senderName = 'Anh/Chị') {
 
   return {
     ok: false,
-    error: fastResult.error || aiResult.error || 'Em chưa hiểu rõ thời gian anh/chị muốn hẹn ạ!'
+    error: fastResult.error || aiResult.error || 'Em chưa hiểu rõ thời gian anh muốn hẹn ạ!'
   };
 }
 
@@ -746,7 +916,7 @@ async function checkAndTriggerReminders() {
     if (reminder && reminder.chatId) {
       const person = resolvePerson(reminder.targetName, reminder.senderName, reminder.task);
 
-      // Tạo tin nhắn nhắc nhở ngọt ngào từ Bọt biển (không có chuỗi ID thô hay anh/chị chung chung)
+      // Tạo tin nhắn nhắc nhở ngọt ngào từ Bọt biển (không có chuỗi ID thô hay anh chung chung)
       let triggerMessage = `⏰ RENG RENG RENG! Đến giờ rồi nè ${person.mentionTag} ơi! 🫧🔔\n\n📌 Lời nhắc: ${reminder.task}\n🕒 Đã hẹn: ${reminder.timeFormatted}\n\nEm nhắc đúng giờ rồi nha, ${person.pronoun} nhớ làm liền nghen! Đừng quên đó nè 🥰✨`;
       triggerMessage = triggerMessage.replace(/\[@?[a-f0-9]{16,}\]\s*/gi, '');
 
@@ -782,7 +952,7 @@ async function checkAndTriggerReminders() {
 }
 
 /**
- * Phân tích danh xưng và đối tượng chuẩn xác nhất, loại bỏ hoàn toàn "anh/chị" chung chung
+ * Phân tích danh xưng và đối tượng chuẩn xác nhất, loại bỏ hoàn toàn "anh" chung chung
  * @param {string} rawTarget 
  * @param {string} senderName 
  * @param {string} fullText 
@@ -801,7 +971,7 @@ function resolvePerson(rawTarget = '', senderName = 'Anh', fullText = '') {
     };
   }
 
-  // 2. Tên cơ sở (bỏ tiền tố anh/chị/em nếu có để chuẩn hóa)
+  // 2. Tên cơ sở (bỏ tiền tố anh/em nếu có để chuẩn hóa)
   let baseName = (rawTarget || senderName || 'Anh').trim();
   baseName = baseName.replace(/^(?:cho\s+)?(?:2|hai)?\s*em\s+(?:của\s+)?(?:anh|tôi|mình)\s*(?:là)?\s*/i, '');
   baseName = baseName.replace(/^(?:các\s+)?(?:anh|chị|em|bác|chú|cô|bạn)\s+/i, '').trim();

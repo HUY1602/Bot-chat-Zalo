@@ -689,8 +689,8 @@ async function getAvatarSourceDetails(req = null) {
  * @param {boolean} [isOther=false] - Người dùng xin ảnh khác hay không
  * @returns {string}
  */
-function getAvatarCaption(senderName = 'anh/chị', isOther = false) {
-  const name = senderName && senderName !== 'Thành viên' ? senderName : 'anh/chị';
+function getAvatarCaption(senderName = 'anh', isOther = false) {
+  const name = senderName && senderName !== 'Thành viên' ? senderName : 'anh';
 
   if (isOther) {
     const otherCaptions = [
