@@ -410,7 +410,9 @@ function parseReminderFast(rawText, senderName = 'anh') {
 
   // Nhận diện mẫu đặc biệt: "gọi [ai đó] dậy" hoặc "kêu [ai đó] dậy"
   let isWakeUp = false;
-  const wakeUpMatch = text.match(/\b(?:gọi|kêu|nhắc|báo)\s+(?:cho\s+)?(.+?)\s+(?:dậy|thức dậy|ngủ dậy)\b/i);
+  // Chỉ nhận hành động gọi thức dậy rõ ràng. "nhắc anh 11h đứng dậy"
+  // là nhắc chính người gửi làm việc, không phải tên "anh 11h đứng".
+  const wakeUpMatch = text.match(/(?:^|\s)(?:gọi|kêu)\s+(?:cho\s+)?([^\d]+?)\s+(?:thức dậy|ngủ dậy|dậy)(?=\s|$|[.!?])/i);
   if (wakeUpMatch) {
     isWakeUp = true;
     let rawWho = wakeUpMatch[1].replace(/^(?:cho\s+)?(?:2|hai)?\s*em\s+(?:của\s+)?(?:anh|tôi|mình)\s*(?:là)?\s*/i, '').trim();
@@ -428,7 +430,7 @@ function parseReminderFast(rawText, senderName = 'anh') {
     const pronoun = targetMatch[1].trim().toLowerCase();
     const potentialName = targetMatch[2] ? targetMatch[2].trim() : '';
 
-    const EXCLUDED_WORDS = /^(?:mai|ngay|hom|chieu|toi|sang|trua|lat|ty|luc|vao|gio|tieng|phut|nua|nho|hay|giup|ho|voi|nhe|nha|di|nha|nghen|goi|lam|nho|di|nop|hop|uong|mua|an|hoc|viet|gui|don|noi|xem|chat|bao|choi|ve|ra|vao|lay|tat|bat|test|chay|xong|chuan)\b/i;
+    const EXCLUDED_WORDS = /^(?:dung|thuc|day|mai|ngay|hom|chieu|toi|sang|trua|lat|ty|luc|vao|gio|tieng|phut|nua|nho|hay|giup|ho|voi|nhe|nha|di|nha|nghen|goi|lam|nho|di|nop|hop|uong|mua|an|hoc|viet|gui|don|noi|xem|chat|bao|choi|ve|ra|vao|lay|tat|bat|test|chay|xong|chuan)\b/i;
 
     if (pronoun === 'cả nhóm' || pronoun === 'nhóm') {
       targetName = 'cả nhóm mình';
@@ -578,7 +580,7 @@ function parseReminderFast(rawText, senderName = 'anh') {
 
   // Bỏ đối tượng đích đã trích xuất
   if (targetNameToRemove) {
-    task = task.replace(new RegExp(`\\b${targetNameToRemove}\\b`, 'i'), ' ');
+    task = task.replace(targetNameToRemove, ' ');
   }
 
   // Dọn dẹp khoảng trắng trước khi lọc tiền tố
@@ -917,11 +919,11 @@ async function checkAndTriggerReminders() {
       const person = resolvePerson(reminder.targetName, reminder.senderName, reminder.task);
 
       // Tạo tin nhắn nhắc nhở ngọt ngào từ Bọt biển (không có chuỗi ID thô hay anh chung chung)
-      let triggerMessage = `⏰ RENG RENG RENG! Đến giờ rồi nè ${person.mentionTag} ơi! 🫧🔔\n\n📌 Lời nhắc: ${reminder.task}\n🕒 Đã hẹn: ${reminder.timeFormatted}\n\nEm nhắc đúng giờ rồi nha, ${person.pronoun} nhớ làm liền nghen! Đừng quên đó nè 🥰✨`;
+      let triggerMessage = `⏰ RENG RENG RENG! Đến giờ rồi nè ${person.displayName} ơi! 🫧🔔\n\n📌 Lời nhắc: ${reminder.task}\n🕒 Đã hẹn: ${reminder.timeFormatted}\n\n${person.pronoun} nhớ làm liền nghen! Đừng quên đó nè 🥰✨`;
       triggerMessage = triggerMessage.replace(/\[@?[a-f0-9]{16,}\]\s*/gi, '');
 
       try {
-        // Gửi tin nhắn có reply_to_message_id trích dẫn tin nhắn hẹn ban đầu để Zalo phát chuông ping người dùng
+        // Giữ trích dẫn nếu API chấp nhận; không coi đây là mention hay bảo đảm phát chuông.
         await botService.sendMessage(reminder.chatId, triggerMessage, reminder.msgId || null);
         console.log(`[Reminder Sent] Đã gửi thông báo hẹn giờ tới chat ${reminder.chatId}: "${reminder.task}"`);
         triggered.push(reminder);
@@ -959,7 +961,7 @@ async function checkAndTriggerReminders() {
  * @returns {{ pronoun: string, displayName: string, mentionTag: string, baseName: string }}
  */
 function resolvePerson(rawTarget = '', senderName = 'Anh', fullText = '') {
-  const combined = `${rawTarget} ${senderName} ${fullText}`.toLowerCase();
+  const combined = (rawTarget || senderName).toLowerCase();
 
   // 1. Cả nhóm
   if (/\b(?:cả\s*nhóm|nhóm|mọi\s*người|mng|cả\s*nhà)\b/i.test(combined)) {
@@ -973,6 +975,11 @@ function resolvePerson(rawTarget = '', senderName = 'Anh', fullText = '') {
 
   // 2. Tên cơ sở (bỏ tiền tố anh/em nếu có để chuẩn hóa)
   let baseName = (rawTarget || senderName || 'Anh').trim();
+  // ID trong nội dung là văn bản thuần, không phải cú pháp mention được Bot API hỗ trợ.
+  baseName = baseName.replace(/\[@?[^\]]+\]/g, '').trim() || senderName || 'Anh';
+  if (/^(?:a|anh|chi|chị|e|em|tôi|toi|mình|minh)$/i.test(baseName)) {
+    baseName = senderName || 'Anh';
+  }
   baseName = baseName.replace(/^(?:cho\s+)?(?:2|hai)?\s*em\s+(?:của\s+)?(?:anh|tôi|mình)\s*(?:là)?\s*/i, '');
   baseName = baseName.replace(/^(?:các\s+)?(?:anh|chị|em|bác|chú|cô|bạn)\s+/i, '').trim();
   if (['tôi', 'mình'].includes(baseName.toLowerCase())) {
