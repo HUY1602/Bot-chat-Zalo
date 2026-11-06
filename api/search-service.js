@@ -94,14 +94,16 @@ function shouldSearchWeb(text) {
   if (/\b(?:bong da|bong ro|tennis|cau long|boxing|boi|olympic|sea games|v.?league|premier league|la liga|serie a|bundesliga|champions league|c1|world cup|euro|tran dau|ty so|ti so|cau thu|huan luyen vien|doi tuyen|vo dich|el clasico|clasico|derby)\b/i.test(combined)) return true;
 
   // 2b. Tên cầu thủ / CLB nổi tiếng kết hợp từ hỏi hoặc từ sự kiện
-  const famousPlayers = /\b(?:ronaldo|messi|mbappe|haaland|neymar|mbappe|salah|benzema|lewandowski|modric|de bruyne|vardy|rooney|rashford|cr7|r9|r10|van lam|cong phuong|quang hai|tien linh|hoang duc|hung dung|van toan|van thanh|ngoc hai|duy manh|doan van hau|nguyen tien linh)\b/i;
+  // Bao gồm biệt danh Việt Nam: "anh 7" = CR7/Ronaldo, "siêu nhân" = Messi, v.v.
+  const famousPlayers = /\b(?:ronaldo|messi|mbappe|haaland|neymar|salah|benzema|lewandowski|modric|de bruyne|vardy|rooney|rashford|cr7|r9|r10|anh 7|anh7|so 7|so7|van lam|cong phuong|quang hai|tien linh|hoang duc|hung dung|van toan|van thanh|ngoc hai|duy manh|doan van hau|nguyen tien linh)\b/i;
   const famousClubs = /\b(?:arsenal|chelsea|manchester united|man utd|man city|liverpool|barcelona|real madrid|psg|juventus|inter milan|ac milan|bayern munich|dortmund|ajax|atletico|napoli|roma|lazio|porto|benfica|sevilla|slna|hanoi fc|hoang anh gia lai|hagl|binh duong|viettel|cong an ha noi)\b/i;
-  const sportsEvents = /\b(?:ghi ban|pha luoi|thang|thua|hoa|dau|vong|luot|ban thang|ban thua|the vang|the do|penalty|pha|su kien|chuyen nhuong|chia tay|roi|bo|ky hop dong|boc tham|ket qua|diem so|chi so|hinh thuc|chan thuong|phong do|moi nhat|gan day|vua qua|hom qua|hom nay|tuan nay)\b/i;
+  // Mở rộng sportsEvents: thêm "moi" (mới đứng lẻ), "tin gi", "chuyen gi", "co gi"
+  const sportsEvents = /\b(?:ghi ban|pha luoi|thang|thua|hoa|dau|vong|luot|ban thang|ban thua|the vang|the do|penalty|su kien|chuyen nhuong|chia tay|roi|bo|ky hop dong|boc tham|ket qua|diem so|chi so|chan thuong|phong do|moi nhat|moi|gan day|vua qua|hom qua|hom nay|tuan nay|tin gi|co gi|chuyen gi|co tin|tin tuc|tin moi|co tin gi)\b/i;
   if (famousPlayers.test(combined) && sportsEvents.test(unaccented)) return true;
   if (famousClubs.test(combined) && sportsEvents.test(unaccented)) return true;
 
-  // 2c. Từ khoá thể thao đứng độc lập nhưng kết hợp với "mới nhất", "hôm nay", "hôm qua"
-  if (/\b(?:moi nhat|hom nay|hom qua|tuan nay|gan day|vua qua)\b/i.test(unaccented) &&
+  // 2c. Từ khoá thể thao đứng độc lập nhưng kết hợp với "mới nhất", "hôm nay", "hôm qua", hoặc "mới"
+  if (/\b(?:moi nhat|moi|hom nay|hom qua|tuan nay|gan day|vua qua)\b/i.test(unaccented) &&
       (famousPlayers.test(combined) || famousClubs.test(combined))) return true;
 
   // 3. Thời tiết, thiên tai
@@ -121,6 +123,11 @@ function shouldSearchWeb(text) {
       raw.length > 5 &&
       !/^(?:bot|em)\s/.test(unaccented)) {
     // Có độ dài đủ để là câu hỏi thực tế (> 5 ký tự) và không phải hỏi về bot
+    return true;
+  }
+
+  // 7b. Dạng "tin gì mới", "có tin gì mới", "có chuyện gì mới", "có gì hot" - hỏi tin tức chung
+  if (/\b(?:tin gi moi|co tin gi|chuyen gi moi|co gi hot|co gi moi|co gi chua|biet tin gi|biet gi moi|biet chuyen gi)\b/i.test(unaccented)) {
     return true;
   }
 
