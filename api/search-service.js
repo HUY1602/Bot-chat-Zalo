@@ -90,8 +90,19 @@ function shouldSearchWeb(text) {
   // 1. Giải thưởng, danh hiệu, bảng xếp hạng
   if (/\b(?:qua bong|bong vang|bong bac|bong dong|ballon d'?or|chiec giay vang|vua pha luoi|cau thu xuat sac|giai thuong|trao giai|de cu|doat giai|vinh danh|hoa hau|a hau|oscar|grammy|emmy|golden globe|nobel|bang xep hang)\b/i.test(combined)) return true;
 
-  // 2. Thể thao, trận đấu, tỷ số
+  // 2. Thể thao, trận đấu, tỷ số - mở rộng thêm CLB nổi tiếng và tên cầu thủ nổi tiếng
   if (/\b(?:bong da|bong ro|tennis|cau long|boxing|boi|olympic|sea games|v.?league|premier league|la liga|serie a|bundesliga|champions league|c1|world cup|euro|tran dau|ty so|ti so|cau thu|huan luyen vien|doi tuyen|vo dich|el clasico|clasico|derby)\b/i.test(combined)) return true;
+
+  // 2b. Tên cầu thủ / CLB nổi tiếng kết hợp từ hỏi hoặc từ sự kiện
+  const famousPlayers = /\b(?:ronaldo|messi|mbappe|haaland|neymar|mbappe|salah|benzema|lewandowski|modric|de bruyne|vardy|rooney|rashford|cr7|r9|r10|van lam|cong phuong|quang hai|tien linh|hoang duc|hung dung|van toan|van thanh|ngoc hai|duy manh|doan van hau|nguyen tien linh)\b/i;
+  const famousClubs = /\b(?:arsenal|chelsea|manchester united|man utd|man city|liverpool|barcelona|real madrid|psg|juventus|inter milan|ac milan|bayern munich|dortmund|ajax|atletico|napoli|roma|lazio|porto|benfica|sevilla|slna|hanoi fc|hoang anh gia lai|hagl|binh duong|viettel|cong an ha noi)\b/i;
+  const sportsEvents = /\b(?:ghi ban|pha luoi|thang|thua|hoa|dau|vong|luot|ban thang|ban thua|the vang|the do|penalty|pha|su kien|chuyen nhuong|chia tay|roi|bo|ky hop dong|boc tham|ket qua|diem so|chi so|hinh thuc|chan thuong|phong do|moi nhat|gan day|vua qua|hom qua|hom nay|tuan nay)\b/i;
+  if (famousPlayers.test(combined) && sportsEvents.test(unaccented)) return true;
+  if (famousClubs.test(combined) && sportsEvents.test(unaccented)) return true;
+
+  // 2c. Từ khoá thể thao đứng độc lập nhưng kết hợp với "mới nhất", "hôm nay", "hôm qua"
+  if (/\b(?:moi nhat|hom nay|hom qua|tuan nay|gan day|vua qua)\b/i.test(unaccented) &&
+      (famousPlayers.test(combined) || famousClubs.test(combined))) return true;
 
   // 3. Thời tiết, thiên tai
   if (/\b(?:thoi tiet|nhiet do|do am|troi mua|mua to|mua phun|troi nang|bao so|ap thap|lu lut|du bao)\b/i.test(unaccented) || /\b(?:mưa|nắng|bão|lũ|lụt)\b/i.test(raw)) return true;
@@ -103,10 +114,17 @@ function shouldSearchWeb(text) {
   if (/\b(?:concert|tour|show|festival|le hoi|buoi dien|lich dien|lich chieu|ve concert|khoi chieu|cong chieu)\b/i.test(unaccented)) return true;
 
   // 6. Tin tức, sự kiện nóng, thời sự
-  if (/\b(?:tin tuc|thoi su|ban tin|scandal|thien tai|tai nan|su co|ket qua)\b/i.test(unaccented)) return true;
+  if (/\b(?:tin tuc|thoi su|ban tin|scandal|thien tai|tai nan|su co|ket qua|kq)\b/i.test(unaccented)) return true;
 
-  // 7. Thời gian hiện tại kết hợp từ hỏi
-  if (/\b(?:hom nay|ngay mai|tuan nay|thang nay|nam nay|hien tai|hien nay|moi nhat|gan day|vua)\b/i.test(unaccented) &&
+  // 7. Thời gian hiện tại kết hợp từ hỏi (mở rộng: "mới nhất" + thực thể, không cần từ hỏi)
+  if (/\b(?:moi nhat|gan day|vua qua|vua)\b/i.test(unaccented) &&
+      raw.length > 5 &&
+      !/^(?:bot|em)\s/.test(unaccented)) {
+    // Có độ dài đủ để là câu hỏi thực tế (> 5 ký tự) và không phải hỏi về bot
+    return true;
+  }
+
+  if (/\b(?:hom nay|ngay mai|tuan nay|thang nay|nam nay|hien tai|hien nay)\b/i.test(unaccented) &&
       /\b(?:la gi|khi nao|bao gio|o dau|the nao|ai|may gio|ngay may|co gi|chuyen gi)\b/i.test(unaccented)) {
     return true;
   }
@@ -115,6 +133,11 @@ function shouldSearchWeb(text) {
   if (/\b(?:khi nao|bao gio|ngay nao|o dau|bao nhieu|bao lau|ai la|ai doat|ai thang|ai vo dich|lich thi dau|thong tin ve)\b/i.test(unaccented)) {
     return true;
   }
+
+  // 9. Tin tức / sự kiện gắn tên người/thương hiệu nổi tiếng + hành động sự kiện
+  const namedEntities = /\b(?:ronaldo|messi|mbappe|haaland|trump|biden|putin|biden|elon musk|taylor swift|blackpink|bts|apple|google|microsoft|tesla|meta|openai|chatgpt|gemini|zalo|vingroup|vinfast|vietnam airlines|vietjet|grab|shopee|lazada|tiktok|youtube|samsung|iphone|android)\b/i;
+  const eventKeywords = /\b(?:chia tay|roi bo|bi cat|bi pha|duoc bau|len ngoi|tu chuc|bi bat|bi phat|ra mat|ra di|qua doi|tu tran|bi thuong|phuc hoi|tro lai|len tieng|xac nhan|tiet lo|he lo|cong bo|ky hop dong|chuyen sang|mua lai|mua ve|bi cam|bi treo gio|dat ky luc|pha ky luc|dat giai|doat giai)\b/i;
+  if (namedEntities.test(combined) && eventKeywords.test(unaccented)) return true;
 
   return false;
 }
