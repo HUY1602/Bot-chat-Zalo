@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { generateAnswerWithAction } = require('../api/gemini-service');
+const { generateAnswerWithAction } = require('../lib/');
 
 async function run() {
   const r1 = await generateAnswerWithAction('ảnh', { senderName: 'Mai Quang Huy' });

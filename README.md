@@ -37,18 +37,20 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 ```
 ├── api/
 │   ├── webhook.js         # Endpoint nhận webhook sự kiện từ Zalo (POST /api/webhook)
+│   ├── reminder-cron.js   # Endpoint cron quét định kỳ nhắc việc & Điểm tin sáng
+│   ├── memory.js          # Endpoint kiểm tra bộ nhớ trò chuyện (GET /api/memory)
+│   ├── setup.js           # API phục vụ cấu hình & kiểm tra hệ thống trên Dashboard
+│   └── test-chat.js       # API test chat Gemini trực tiếp từ Web Dashboard
+├── lib/
 │   ├── bot-service.js     # Thư viện gọi Zalo Bot API (sendMessage, sendPhoto, setWebhook...)
 │   ├── gemini-service.js  # Tích hợp Google Gemini AI, Intent Routing & Real-time Anchor
 │   ├── memory-service.js  # Quản lý bộ nhớ trò chuyện multi-turn qua Upstash Redis REST
 │   ├── reminder-service.js# Phân tích cú pháp hẹn giờ tiếng Việt & xử lý hàng đợi nhắc việc
-│   ├── reminder-cron.js   # Endpoint cron quét định kỳ nhắc việc cho Vercel Cron & Điểm tin sáng
 │   ├── weather-service.js # Dịch vụ tra cứu dự báo thời tiết Open-Meteo chuẩn xác
 │   ├── daily-digest-service.js # Lời chúc, thời tiết & điểm tin sáng tự động 7h30
 │   ├── search-service.js  # Tra cứu thông tin thời gian thực từ Google qua SerpApi
 │   ├── avatar-service.js  # Quét và bốc ngẫu nhiên avatar từ thư mục Google Drive
-│   ├── image-service.js   # Tạo prompt và render ảnh vẽ nghệ thuật AI (Flux / Polinations)
-│   ├── setup.js           # API phục vụ cấu hình & kiểm tra hệ thống trên Dashboard
-│   └── test-chat.js       # API test chat Gemini trực tiếp từ Web Dashboard
+│   └── image-service.js   # Tạo prompt và render ảnh vẽ nghệ thuật AI (Flux / Polinations)
 ├── public/
 │   ├── index.html         # Giao diện Web Dashboard quản trị hiện đại
 │   ├── style.css          # Giao diện Dark Mode cao cấp

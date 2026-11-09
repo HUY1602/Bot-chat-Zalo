@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { generateAnswerWithAction } = require('../api/gemini-service');
+const { generateAnswerWithAction } = require('../lib/');
 
 async function testWithHistory() {
   const res = await fetch(process.env.UPSTASH_REDIS_REST_URL + '/get/zalo:chat:zgr-9b2c3b8596ea7fb426fb', {

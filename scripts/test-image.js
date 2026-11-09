@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { isDrawRequest, extractDrawPrompt, enhancePromptWithGemini, buildImageUrl } = require('../api/image-service');
+const { isDrawRequest, extractDrawPrompt, enhancePromptWithGemini, buildImageUrl } = require('../lib/');
 
 const testCases = [
   // Cần bắt được (true)

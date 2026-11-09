@@ -5,7 +5,7 @@
  */
 
 require('dotenv').config();
-const { setWebhook, getBotInfo, testWebhook } = require('../api/bot-service');
+const { setWebhook, getBotInfo, testWebhook } = require('../lib/');
 
 async function main() {
   const urlArg = process.argv[2];

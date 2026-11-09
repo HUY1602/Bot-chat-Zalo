@@ -4,11 +4,11 @@
  * Actions: 'get_bot_info', 'set_webhook', 'test_webhook', 'check_env'
  */
 
-const botService = require('./bot-service');
-const geminiService = require('./gemini-service');
-const memoryService = require('./memory-service');
-const avatarService = require('./avatar-service');
-const reminderService = require('./reminder-service');
+const botService = require('../lib/bot-service');
+const geminiService = require('../lib/gemini-service');
+const memoryService = require('../lib/memory-service');
+const avatarService = require('../lib/avatar-service');
+const reminderService = require('../lib/reminder-service');
 
 module.exports = async function handler(req, res) {
   if (req.method === 'GET') {

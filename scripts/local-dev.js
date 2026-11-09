@@ -13,7 +13,7 @@ const setupHandler = require('../api/setup');
 const testChatHandler = require('../api/test-chat');
 const memoryHandler = require('../api/memory');
 const reminderCronHandler = require('../api/reminder-cron');
-const reminderService = require('../api/reminder-service');
+const reminderService = require('../lib/reminder-service');
 
 const app = express();
 const PORT = process.env.PORT || 3001;

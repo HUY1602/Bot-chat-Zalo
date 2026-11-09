@@ -1,4 +1,4 @@
-const { shouldSearchWeb } = require('../api/search-service');
+const { shouldSearchWeb } = require('../lib/');
 
 const cases = [
   // Should be TRUE (cần tìm kiếm)

@@ -5,8 +5,8 @@
  */
 
 require('dotenv').config();
-const { getBotInfo, testWebhook } = require('../api/bot-service');
-const { generateAnswer, DEFAULT_MODEL } = require('../api/gemini-service');
+const { getBotInfo, testWebhook } = require('../lib/');
+const { generateAnswer, DEFAULT_MODEL } = require('../lib/');
 
 async function testAll() {
   console.log('==================================================');

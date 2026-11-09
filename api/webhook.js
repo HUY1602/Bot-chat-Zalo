@@ -3,15 +3,15 @@
  * Endpoint: POST /api/webhook
  */
 
-const botService = require('./bot-service');
-const geminiService = require('./gemini-service');
-const memoryService = require('./memory-service');
-const avatarService = require('./avatar-service');
-const imageService = require('./image-service');
-const searchService = require('./search-service');
-const reminderService = require('./reminder-service');
-const dailyDigestService = require('./daily-digest-service');
-const weatherService = require('./weather-service');
+const botService = require('../lib/bot-service');
+const geminiService = require('../lib/gemini-service');
+const memoryService = require('../lib/memory-service');
+const avatarService = require('../lib/avatar-service');
+const imageService = require('../lib/image-service');
+const searchService = require('../lib/search-service');
+const reminderService = require('../lib/reminder-service');
+const dailyDigestService = require('../lib/daily-digest-service');
+const weatherService = require('../lib/weather-service');
 
 // Cache to prevent duplicate processing from webhook retries
 const processedMessageIds = new Map();

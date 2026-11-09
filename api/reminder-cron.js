@@ -8,8 +8,8 @@
  * - Web Dashboard (manual trigger / view upcoming reminders)
  */
 
-const reminderService = require('./reminder-service');
-const dailyDigestService = require('./daily-digest-service');
+const reminderService = require('../lib/reminder-service');
+const dailyDigestService = require('../lib/daily-digest-service');
 
 module.exports = async function handler(req, res) {
   // Allow optional secret token check for cron requests

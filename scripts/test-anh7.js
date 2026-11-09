@@ -1,4 +1,4 @@
-const { shouldSearchWeb } = require('../api/search-service');
+const { shouldSearchWeb } = require('../lib/');
 
 // Test cases từ cuộc hội thoại thực tế
 const cases = [

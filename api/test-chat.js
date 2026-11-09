@@ -3,10 +3,10 @@
  * Allows direct chat testing from the dashboard
  */
 
-const geminiService = require('./gemini-service');
-const avatarService = require('./avatar-service');
-const imageService = require('./image-service');
-const searchService = require('./search-service');
+const geminiService = require('../lib/gemini-service');
+const avatarService = require('../lib/avatar-service');
+const imageService = require('../lib/image-service');
+const searchService = require('../lib/search-service');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {

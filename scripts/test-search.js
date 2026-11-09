@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { shouldSearchWeb, searchWeb, buildSearchContext } = require('../api/search-service');
+const { shouldSearchWeb, searchWeb, buildSearchContext } = require('../lib/');
 
 const testCases = [
   'cr7 chia tay doi tuyen quoc gia',

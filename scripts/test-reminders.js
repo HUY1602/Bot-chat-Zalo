@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
-const reminderService = require('../api/reminder-service');
-const botService = require('../api/bot-service');
+const reminderService = require('../lib/');
+const botService = require('../lib/');
 
 async function main() {
   // Isolate tests from Redis and Zalo. No network requests or real reminders.

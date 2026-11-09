@@ -1,4 +1,4 @@
-const { isBotPhotoRequest, getBotAvatarUrl, getAvatarCaption } = require('../api/avatar-service');
+const { isBotPhotoRequest, getBotAvatarUrl, getAvatarCaption } = require('../lib/');
 
 const testCases = [
   // Cần bắt được (true)
@@ -64,7 +64,7 @@ for (const tc of testCases) {
 }
 
 console.log('\n--- KIỂM TRA AVATAR FOLDER & RANDOM SELECTION ---');
-const { getLocalAvatarFiles, getRandomLocalAvatarFile } = require('../api/avatar-service');
+const { getLocalAvatarFiles, getRandomLocalAvatarFile } = require('../lib/');
 const files = getLocalAvatarFiles();
 console.log(`Tìm thấy ${files.length} ảnh trong thư mục avatar:`, files);
 

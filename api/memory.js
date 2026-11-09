@@ -4,7 +4,7 @@
  * Allows users to view live conversation memory stored in Upstash Redis or In-Memory RAM
  */
 
-const memoryService = require('./memory-service');
+const memoryService = require('../lib/memory-service');
 
 function formatTtl(seconds) {
   if (!seconds || seconds <= 0) return 'Hết hạn';
