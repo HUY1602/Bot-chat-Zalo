@@ -1,8 +1,8 @@
-name: Reminder Cron Heartbeat
+name: Reminder & Daily Digest Heartbeat
 
 on:
   schedule:
-    # Quét định kỳ mỗi 5 phút kích hoạt các nhắc việc đến hạn
+    # Quét định kỳ mỗi 5 phút kích hoạt các nhắc việc đến hạn và bắn Điểm tin sáng 7h30
     - cron: '*/5 * * * *'
   workflow_dispatch:
 

@@ -15,3 +15,8 @@ yarn-error.log*
 # Operating System
 .DS_Store
 Thumbs.db
+
+# IDE & Editor
+.vscode/
+Microsoft/
+

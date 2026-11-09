@@ -10,6 +10,8 @@ const avatarService = require('./avatar-service');
 const imageService = require('./image-service');
 const searchService = require('./search-service');
 const reminderService = require('./reminder-service');
+const dailyDigestService = require('./daily-digest-service');
+const weatherService = require('./weather-service');
 
 // Cache to prevent duplicate processing from webhook retries
 const processedMessageIds = new Map();
@@ -223,9 +225,12 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // Opportunistic trigger: Quét kiểm tra xem có nhắc việc nào đã đến hạn không
+  // Opportunistic trigger: Quét kiểm tra xem có nhắc việc hoặc điểm tin sáng nào đến hạn không
   reminderService.checkAndTriggerReminders().catch(err => {
     console.warn('[Webhook Opportunistic Trigger Error]:', err.message);
+  });
+  dailyDigestService.checkAndTriggerMorningDigest().catch(err => {
+    console.warn('[Webhook Opportunistic Digest Error]:', err.message);
   });
 
   // Verify secret token if configured
@@ -253,6 +258,9 @@ module.exports = async function handler(req, res) {
     console.log('Sự kiện không chứa tin nhắn text:', eventName);
     return res.status(200).json({ ok: true, note: 'Event acknowledged' });
   }
+
+  // Tự động ghi nhận chatId vào danh sách nhận điểm tin sáng nếu chưa có
+  dailyDigestService.registerChatForDigest(chatId).catch(() => {});
 
   // Extract fields
   const msgId = message.msg_id || message.message_id || event.msg_id || payload.msg_id;
@@ -334,10 +342,17 @@ module.exports = async function handler(req, res) {
 
     // 1. Built-in command: /start hoặc /help
     if (userQuery === '/start' || userQuery === '/help' || userQuery === '!help') {
-      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh cần gì cứ hỏi em nha!\n\n📌 Các tính năng của em:\n• Hỏi đáp thông minh: Gõ @tên_bot kèm câu hỏi hoặc Reply tin nhắn của em\n• ⏰ Hẹn giờ & Nhắc việc: "nhắc anh 10 phút nữa uống nước", "nhắc em mai 8h sáng nộp báo cáo", /reminders, /huynhac\n• 📝 Tóm tắt hội thoại: "tóm tắt cuộc trò chuyện", "tóm tắt 20 tin nhắn gần nhất", /tomtat, /summary
-• 🎨 Vẽ tranh AI: Gõ "vẽ + mô tả" (ví dụ: vẽ chú mèo phi hành gia) hoặc "/draw ..."\n• 📸 Xem ảnh của em: Gõ "cho xem ảnh bot", "xem mặt bot"\n• /ping: Kiểm tra bot còn hoạt động không\n• /reset: Làm mới bộ nhớ trò chuyện\n• /help: Xem lại hướng dẫn này`;
+      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh cần gì cứ hỏi em nha!\n\n📌 Các tính năng của em:\n• Hỏi đáp thông minh: Gõ @tên_bot kèm câu hỏi hoặc Reply tin nhắn của em\n• ☀️ Điểm tin sáng 7h30: Tự động gửi lời chúc, dự báo thời tiết & lịch nhắc mỗi sáng (gõ /morning để xem thử)\n• ⏰ Hẹn giờ & Nhắc việc: "nhắc anh 10 phút nữa uống nước", "nhắc em mai 8h sáng nộp báo cáo", /reminders, /huynhac\n• 📝 Tóm tắt hội thoại: "tóm tắt cuộc trò chuyện", "tóm tắt 20 tin nhắn gần nhất", /tomtat, /summary\n• 🎨 Vẽ tranh AI: Gõ "vẽ + mô tả" (ví dụ: vẽ chú mèo phi hành gia) hoặc "/draw ..."\n• 📸 Xem ảnh của em: Gõ "cho xem ảnh bot", "xem mặt bot"\n• /ping: Kiểm tra bot còn hoạt động không\n• /reset: Làm mới bộ nhớ trò chuyện\n• /help: Xem lại hướng dẫn này`;
       await botService.sendMessage(chatId, helpText, msgId);
       return res.status(200).json({ ok: true });
+    }
+
+    // 1.5 Built-in command: /morning hoặc /diemtin (Xem trước điểm tin & dự báo thời tiết)
+    if (/^\/(?:morning|diemtin|chao|thoitiet)\b/i.test(userQuery) || /^(?:điểm tin sáng|xem điểm tin|dự báo thời tiết hôm nay)$/i.test(userQuery)) {
+      const dtParts = dailyDigestService.getVietnamDateTimeParts();
+      const digestMsg = await dailyDigestService.composeMorningDigestMessage(chatId, dtParts);
+      await botService.sendMessage(chatId, digestMsg, msgId);
+      return res.status(200).json({ ok: true, action: 'morningDigest' });
     }
 
     // 2. Built-in command: /ping

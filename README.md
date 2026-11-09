@@ -14,6 +14,7 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 - **Trạng Thái Đang Soạn Tin Nhắn Thời Gian Thực (Typing Indicator)**: Tự động kích hoạt trạng thái "đang soạn tin..." (sendChatAction) trên giao diện chat Zalo ngay khi nhận được tin nhắn, tự động duy trì tín hiệu liên tục trong lúc AI đang xử lý (phân tích hình ảnh, tra cứu thông tin mạng, suy nghĩ câu trả lời hoặc sinh ảnh nghệ thuật), giúp người dùng biết bot đang chuẩn bị phản hồi.
 - **Tóm Tắt Cuộc Trò Chuyện Thông Minh (Conversation Recap)**: Tự động trích xuất và tóm tắt súc tích 20 tin nhắn gần nhất trong nhóm bằng AI, phân loại các chủ đề thảo luận chính và các điểm đáng chú ý/thống nhất của các thành viên (tóm tắt cuộc trò chuyện, tóm tắt 20 tin nhắn gần nhất, /tomtat, /summary).
 - **Tra Cứu Google Thời Gian Thực (SerpApi Web Search)**: Tự động phân tích câu hỏi để tra cứu thông tin thời sự, kết quả bóng đá, sự kiện nóng mới nhất trên Google và đối chiếu mốc thời gian thực tế.
+- **Lời Chúc & Điểm Tin Sáng Tự Động (Daily Morning Digest)**: Tự động gửi lời chúc ngày mới, dự báo thời tiết chi tiết (nhiệt độ, nắng/mưa, lời khuyên trang phục/ô dù), thông điệp truyền cảm hứng và tổng hợp các lịch nhắc việc trong ngày của nhóm vào đúng **7h30 sáng hàng ngày** (hoặc gõ `/morning` để xem trước).
 - **Hẹn Giờ & Nhắc Việc Thông Minh (Reminders & Scheduler)**: Nhận diện ngôn ngữ tự nhiên tiếng Việt chuẩn xác (`nhắc anh 10 phút nữa...`, `nhắc em mai 8h sáng...`, `14h20 gọi 2 em của anh là Tường và Lộc dậy`, `15h nhắc họp phòng ban`, `/remind 15:30 họp phòng ban`). Hỗ trợ hàng đợi thời gian thực trên **Upstash Redis Delay Queue**, tự động réo chuông thông báo đúng giờ qua GitHub Actions Heartbeat / Cron (`/api/reminder-cron`) hoặc khi có tin nhắn mới trong nhóm. Có lệnh xem danh sách (`/reminders`) và hủy nhắc hẹn (`/huynhac`).
 - **Tạo Ảnh & Vẽ Tranh AI (Text-to-Image)**: Tự động nhận diện yêu cầu vẽ tranh tiếng Việt (`vẽ...` hoặc `/draw...`), tối ưu hóa prompt qua Gemini và tạo tác phẩm nghệ thuật 8K sắc nét (mô hình Flux) gửi trực tiếp vào nhóm Zalo.
 - **Gửi Ảnh Đại Diện Tự Động (Google Drive / CDN)**: Khi thành viên yêu cầu xem mặt / xem hình / xem ảnh của bot, bot sẽ tự động quét thư mục Google Drive và bốc ngẫu nhiên ảnh gửi kèm lời chào dễ thương.
@@ -40,7 +41,9 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 │   ├── gemini-service.js  # Tích hợp Google Gemini AI, Intent Routing & Real-time Anchor
 │   ├── memory-service.js  # Quản lý bộ nhớ trò chuyện multi-turn qua Upstash Redis REST
 │   ├── reminder-service.js# Phân tích cú pháp hẹn giờ tiếng Việt & xử lý hàng đợi nhắc việc
-│   ├── reminder-cron.js   # Endpoint cron quét định kỳ nhắc việc cho Vercel Cron
+│   ├── reminder-cron.js   # Endpoint cron quét định kỳ nhắc việc cho Vercel Cron & Điểm tin sáng
+│   ├── weather-service.js # Dịch vụ tra cứu dự báo thời tiết Open-Meteo chuẩn xác
+│   ├── daily-digest-service.js # Lời chúc, thời tiết & điểm tin sáng tự động 7h30
 │   ├── search-service.js  # Tra cứu thông tin thời gian thực từ Google qua SerpApi
 │   ├── avatar-service.js  # Quét và bốc ngẫu nhiên avatar từ thư mục Google Drive
 │   ├── image-service.js   # Tạo prompt và render ảnh vẽ nghệ thuật AI (Flux / Polinations)

@@ -9,6 +9,7 @@
  */
 
 const reminderService = require('./reminder-service');
+const dailyDigestService = require('./daily-digest-service');
 
 module.exports = async function handler(req, res) {
   // Allow optional secret token check for cron requests
@@ -34,6 +35,15 @@ module.exports = async function handler(req, res) {
   try {
     const triggerResult = await reminderService.checkAndTriggerReminders();
 
+    // 2.5 Kiểm tra và kích hoạt Điểm tin buổi sáng (7h30 sáng)
+    const forceDigest = req.query?.triggerDigest === 'true' || req.query?.digest === 'force';
+    let digestResult = null;
+    try {
+      digestResult = await dailyDigestService.checkAndTriggerMorningDigest(forceDigest);
+    } catch (dErr) {
+      console.warn('[Reminder Cron] Lỗi kích hoạt daily digest:', dErr.message);
+    }
+
     // If client requested JSON explicitly
     const acceptHeader = req.headers['accept'] || '';
     if (req.query?.format === 'json' || acceptHeader.includes('application/json') || req.method === 'POST') {
@@ -42,7 +52,8 @@ module.exports = async function handler(req, res) {
         service: 'Zalo Bot Reminder Cron',
         timestamp: new Date().toISOString(),
         triggeredCount: triggerResult.triggeredCount,
-        triggered: triggerResult.triggered
+        triggered: triggerResult.triggered,
+        dailyDigest: digestResult
       });
     }
 
@@ -150,6 +161,12 @@ module.exports = async function handler(req, res) {
       <p style="font-size: 14px;">
         Số lượng nhắc việc vừa được kích hoạt: <strong>${triggerResult.triggeredCount}</strong>
       </p>
+      <p style="font-size: 14px; margin-top: 8px;">
+        Điểm tin sáng 7h30: <strong>${digestResult?.triggeredCount > 0 ? `Đã gửi ${digestResult.triggeredCount} nhóm!` : (digestResult?.reason || 'Chưa đến giờ')}</strong>
+      </p>
+      <div style="margin-top: 12px;">
+        <a href="/api/reminder-cron?triggerDigest=true" class="btn-action" style="background: #10b981; font-size: 12px; display: inline-block;">☀️ Thử Gửi Điểm Tin Sáng Ngay</a>
+      </div>
 
       <div class="tip-box">
         <strong>💡 Thiết lập Cron tự động 24/7:</strong><br>
