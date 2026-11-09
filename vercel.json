@@ -5,11 +5,5 @@
       "maxDuration": 30,
       "includeFiles": "public/**"
     }
-  },
-  "crons": [
-    {
-      "path": "/api/reminder-cron",
-      "schedule": "30 0 * * *"
-    }
-  ]
+  }
 }
