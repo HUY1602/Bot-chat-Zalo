@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node scripts/local-dev.js",
     "dev": "node scripts/local-dev.js",
+    "test": "node --test test/gemini-service.test.js",
     "test-bot": "node scripts/test-bot.js",
     "set-webhook": "node scripts/set-webhook.js"
   },

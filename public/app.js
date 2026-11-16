@@ -43,16 +43,18 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
 
       if (data.ok && data.env) {
-        if (data.env.hasZaloToken && data.env.hasGeminiKey) {
+        if (data.env.hasZaloToken && (data.env.hasGeminiKey || data.env.hasFreeModelKey)) {
           pulseDot.className = 'pulse-dot online';
-          systemStatusText.textContent = 'Hệ Thống Sẵn Sàng 24/7';
+          systemStatusText.textContent = data.env.hasFreeModelKey
+            ? 'Hệ Thống Sẵn Sàng · Ưu Tiên FreeModel'
+            : 'Hệ Thống Sẵn Sàng 24/7';
         } else {
           pulseDot.className = 'pulse-dot';
           systemStatusText.textContent = 'Cần Cấu Hình Biến Môi Trường';
         }
 
-        if (data.env.geminiModel) {
-          currentModelTag.textContent = data.env.geminiModel;
+        if (data.env.preferredModel || data.env.geminiModel) {
+          currentModelTag.textContent = data.env.preferredModel || data.env.geminiModel;
         }
 
         loadBotInfo(data.env);
@@ -113,7 +115,13 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="val" style="color: #34d399;">✅ Đã kết nối</span>
           </div>
           <div class="profile-item">
-            <span>Google Gemini Key:</span>
+            <span>FreeModel API Key:</span>
+            <span class="val" style="color: ${envInfo.hasFreeModelKey ? '#34d399' : '#f59e0b'};">
+              ${envInfo.hasFreeModelKey ? `✅ Ưu tiên · ${envInfo.freeModel}` : '⚠️ Chưa cấu hình'}
+            </span>
+          </div>
+          <div class="profile-item">
+            <span>Google Gemini Key (dự phòng):</span>
             <span class="val" style="color: ${envInfo.hasGeminiKey ? '#34d399' : '#f87171'};">
               ${envInfo.hasGeminiKey ? '✅ Đã kích hoạt' : '⚠️ Chưa cấu hình'}
             </span>

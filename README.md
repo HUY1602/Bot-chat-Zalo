@@ -88,13 +88,17 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 2. Bấm **"Add New..." > "Project"** và chọn Repository `HUY1602/Bot-chat-Zalo`.
 3. Tại mục **Environment Variables**, cấu hình các biến sau:
    - `ZALO_BOT_TOKEN`: Token bot Zalo.
-   - `GEMINI_API_KEY`: API Key Google Gemini.
-   - `GEMINI_MODEL`: `gemini-3.5-flash-lite` (hoặc `gemini-2.5-flash`).
+   - `FREEMODEL_API_KEY`: API Key FreeModel (được ưu tiên gọi trước nếu cấu hình).
+   - `FREEMODEL_MODEL`: Model dùng qua FreeModel (mặc định `gpt-6-luna`).
+   - `GEMINI_API_KEY`: API Key Google Gemini, dùng dự phòng khi FreeModel lỗi.
+   - `GEMINI_MODEL`: Model Gemini dự phòng (`gemini-3.5-flash-lite` hoặc `gemini-2.5-flash`).
    - `UPSTASH_REDIS_REST_URL`: URL REST của Upstash Redis.
    - `UPSTASH_REDIS_REST_TOKEN`: Token REST của Upstash Redis.
    - `SERPAPI_API_KEY`: API Key SerpApi (tra cứu Google).
    - `BOT_AVATAR_URL`: Link thư mục Google Drive chứa ảnh avatar (hoặc link ảnh).
 4. Bấm nút **"Deploy"**. Đợi khoảng 30 giây bạn sẽ nhận được đường link Vercel công khai (ví dụ: `https://bot-chat-zalo-one.vercel.app`).
+
+Khi FreeModel trả lời quá dài hoặc bị ngắt, bot sẽ thử lại FreeModel với yêu cầu trả lời gọn trước; chỉ chuyển sang Gemini nếu FreeModel vẫn lỗi.
 
 ---
 

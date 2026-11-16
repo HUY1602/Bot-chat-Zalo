@@ -17,16 +17,22 @@ module.exports = async function handler(req, res) {
     const localFiles = avatarService.getLocalAvatarFiles();
     const localFile = localFiles.length > 0 ? localFiles[0] : null;
     const hasCustomAvatar = Boolean(process.env.BOT_AVATAR_URL || process.env.GOOGLE_DRIVE_FOLDER_ID || localFiles.length > 0);
+    const hasFreeModelKey = Boolean(process.env.FREEMODEL_API_KEY);
+    const freeModel = process.env.FREEMODEL_MODEL || 'gpt-6-luna';
+    const geminiModel = process.env.GEMINI_MODEL || geminiService.DEFAULT_MODEL;
 
     return res.status(200).json({
       ok: true,
       env: {
         hasZaloToken: Boolean(process.env.ZALO_BOT_TOKEN),
         hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
+        hasFreeModelKey,
+        freeModel,
         hasWebhookSecret: Boolean(process.env.WEBHOOK_SECRET),
         hasUpstashRedis: memStatus.isUpstash,
         memoryProvider: memStatus.provider,
-        geminiModel: process.env.GEMINI_MODEL || geminiService.DEFAULT_MODEL,
+        geminiModel,
+        preferredModel: hasFreeModelKey ? `FreeModel · ${freeModel}` : `Gemini · ${geminiModel}`,
         avatarUrl: avatarDetails.currentSampleUrl,
         avatarSource: avatarDetails.sourceProvider,
         avatarCount: avatarDetails.totalAvatars,
