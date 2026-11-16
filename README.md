@@ -169,6 +169,10 @@ Nếu bạn muốn kiểm tra cấu hình hoặc chạy thử nghiệm tại má
    ```bash
    npm run test-bot
    ```
+   Kiểm tra trực tiếp FreeModel bằng một câu hỏi ngắn (dùng `FREEMODEL_API_KEY` trong `.env`, không in khóa ra màn hình):
+   ```bash
+   npm run test-freemodel
+   ```
 3. Khởi động Web Dashboard nội bộ:
    ```bash
    npm run dev

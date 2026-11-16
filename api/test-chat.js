@@ -1,5 +1,5 @@
 /**
- * Test Chat with Gemini endpoint
+ * Test Chat with the configured AI provider
  * Allows direct chat testing from the dashboard
  */
 
@@ -45,6 +45,8 @@ module.exports = async function handler(req, res) {
       const searchResults = await searchService.searchWeb(message);
       if (searchResults && searchResults.length > 0) {
         searchContext = searchService.buildSearchContext(searchResults);
+      } else {
+        searchContext = searchService.buildSearchContext([]);
       }
     }
 
@@ -82,7 +84,7 @@ module.exports = async function handler(req, res) {
       durationMs: duration
     });
   } catch (err) {
-    console.error('Lỗi khi test chat Gemini:', err);
+    console.error('Lỗi khi test chat AI:', err);
 
     // Fallback: Nếu Gemini lỗi nhưng người dùng hỏi ảnh đại diện theo keyword
     if (avatarService.isBotPhotoRequest(message)) {

@@ -245,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (data.ok) {
         appendMessage('bot', `Bọt biển cute (${data.durationMs}ms)`, data.answer, data.photoUrl);
       } else {
-        appendMessage('bot', 'Hệ Thống Báo Lỗi', `⚠️ ${data.error || 'Không thể tạo phản hồi từ Gemini'}`);
+        appendMessage('bot', 'Hệ Thống Báo Lỗi', `⚠️ ${data.error || 'Không thể tạo phản hồi từ AI'}`);
       }
     } catch (err) {
       removeTypingIndicator(typingId);
@@ -294,8 +294,8 @@ document.addEventListener('DOMContentLoaded', () => {
     msgDiv.innerHTML = `
       <div class="msg-avatar">🤖</div>
       <div class="msg-bubble">
-        <div class="msg-author">Zalo Gemini Bot</div>
-        <div class="msg-text" style="color: #9ca3af; font-style: italic;">Gemini đang suy nghĩ câu trả lời...</div>
+        <div class="msg-author">Bọt biển cute</div>
+        <div class="msg-text" style="color: #9ca3af; font-style: italic;">AI đang tra cứu và soạn câu trả lời...</div>
       </div>
     `;
     chatViewport.appendChild(msgDiv);

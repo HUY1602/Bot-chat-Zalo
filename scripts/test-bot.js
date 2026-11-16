@@ -1,5 +1,5 @@
 /**
- * CLI Script: Test Bot and Gemini configuration
+ * CLI Script: Test Bot and AI provider configuration
  * Usage:
  *   node scripts/test-bot.js
  */
@@ -10,12 +10,14 @@ const { generateAnswer, DEFAULT_MODEL } = require('../lib/');
 
 async function testAll() {
   console.log('==================================================');
-  console.log('🤖 KIỂM TRA HỆ THỐNG ZALO BOT & GEMINI AI 🤖');
+  console.log('🤖 KIỂM TRA HỆ THỐNG ZALO BOT & AI 🤖');
   console.log('==================================================\n');
 
   // 1. Kiểm tra biến môi trường
   console.log('1️⃣ Kiểm tra biến môi trường:');
   console.log(` - ZALO_BOT_TOKEN: ${process.env.ZALO_BOT_TOKEN ? '✅ Đã cấu hình' : '❌ Chưa có'}`);
+  console.log(` - FREEMODEL_API_KEY: ${process.env.FREEMODEL_API_KEY ? '✅ Đã cấu hình' : '⚪ Chưa có'}`);
+  console.log(` - FREEMODEL_MODEL:   ${process.env.FREEMODEL_MODEL || 'gpt-6-luna'}`);
   console.log(` - GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? '✅ Đã cấu hình' : '❌ Chưa có'}`);
   console.log(` - GEMINI_MODEL:   ${process.env.GEMINI_MODEL || DEFAULT_MODEL}`);
   console.log(` - WEBHOOK_SECRET: ${process.env.WEBHOOK_SECRET ? '✅ Đã cấu hình' : '⚪ Không bắt buộc'}\n`);
@@ -40,9 +42,9 @@ async function testAll() {
 
   console.log('\n--------------------------------------------------');
 
-  // 3. Kiểm tra Gemini API
-  if (process.env.GEMINI_API_KEY) {
-    console.log('3️⃣ Kiểm tra phản hồi từ Google Gemini AI:');
+  // 3. Kiểm tra nhà cung cấp AI ưu tiên (FreeModel, sau đó Gemini)
+  if (process.env.FREEMODEL_API_KEY || process.env.GEMINI_API_KEY) {
+    console.log('3️⃣ Kiểm tra phản hồi từ AI (ưu tiên FreeModel, Gemini dự phòng):');
     try {
       const testPrompt = 'Chào bạn! Hãy giới thiệu bạn là ai và sẵn sàng hỗ trợ nhóm Zalo trong 2 câu ngắn.';
       console.log(` 💬 Câu hỏi test: "${testPrompt}"`);
@@ -50,13 +52,13 @@ async function testAll() {
       const reply = await generateAnswer(testPrompt);
       const timeMs = Date.now() - startTime;
 
-      console.log(` ✅ Phản hồi từ Gemini (${timeMs}ms):`);
+      console.log(` ✅ Nhận được phản hồi (${timeMs}ms):`);
       console.log(reply);
     } catch (err) {
-      console.error(' ❌ Gọi Gemini API thất bại:', err.message);
+      console.error(' ❌ Gọi AI API thất bại:', err.message);
     }
   } else {
-    console.log('3️⃣ Bỏ qua kiểm tra Gemini vì chưa điền GEMINI_API_KEY vào .env');
+    console.log('3️⃣ Bỏ qua kiểm tra AI vì chưa cấu hình FREEMODEL_API_KEY hoặc GEMINI_API_KEY trong .env');
   }
 
   console.log('\n==================================================');

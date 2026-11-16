@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { generateAnswer } = require('../lib/gemini-service');
+const searchService = require('../lib/search-service');
+const { generateAnswer, generateAnswerWithAction } = require('../lib/gemini-service');
 
 async function withGeminiResponses(responses, run) {
   const originalFetch = global.fetch;
@@ -98,6 +99,59 @@ test('Gemini response handling', async t => {
     });
   });
 
+  test('model and search actions', async t => {
+    await t.test('answers model identity consistently without calling a model', async () => {
+      await withFreeModelResponses([], async requests => {
+        const { action } = await generateAnswerWithAction('Bạn đang gọi model gì?', {
+          model: 'test-gemini-fallback'
+        });
+        assert.match(action.text, /FreeModel với model test-free-model/);
+        assert.match(action.text, /Gemini model test-gemini-fallback/);
+        assert.equal(requests.length, 0);
+      });
+    });
+
+    await t.test('executes SEARCH_WEB and returns found sources', async () => {
+      const originalSearchWeb = searchService.searchWeb;
+      let searchedQuery = '';
+      searchService.searchWeb = async query => {
+        searchedQuery = query;
+        return [{ title: 'UEFA Nations League', snippet: 'Đội A 2-1 Đội B' }];
+      };
+
+      try {
+        await withFreeModelResponses([
+          freeModelResponse('Dạ để em kiểm tra [[ACTION:SEARCH_WEB: UEFA Nations League kết quả hôm qua]]')
+        ], async requests => {
+          const { action } = await generateAnswerWithAction('Cập nhật kết quả Nation League', {});
+          assert.equal(action.type, 'CHAT');
+          assert.match(action.text, /Đội A 2-1 Đội B/);
+          assert.doesNotMatch(action.text, /ACTION:SEARCH_WEB/);
+          assert.equal(searchedQuery, 'UEFA Nations League kết quả hôm qua');
+          assert.equal(requests.length, 1);
+        });
+      } finally {
+        searchService.searchWeb = originalSearchWeb;
+      }
+    });
+
+    await t.test('does not fabricate results when SEARCH_WEB finds no sources', async () => {
+      const originalSearchWeb = searchService.searchWeb;
+      searchService.searchWeb = async () => [];
+
+      try {
+        await withFreeModelResponses([
+          freeModelResponse('Em sẽ tìm [[ACTION:SEARCH_WEB: kết quả trận đêm qua]]')
+        ], async () => {
+          const { action } = await generateAnswerWithAction('Kết quả trận đêm qua', {});
+          assert.match(action.text, /chưa tìm được nguồn tin đáng tin cậy/);
+        });
+      } finally {
+        searchService.searchWeb = originalSearchWeb;
+      }
+    });
+  });
+
   test('FreeModel provider priority', async t => {
     await t.test('retries incomplete replies with FreeModel before considering Gemini', async () => {
       await withFreeModelResponses([
@@ -112,13 +166,14 @@ test('Gemini response handling', async t => {
       });
     });
 
-    await t.test('keeps a completed response without punctuation on FreeModel', async () => {
+    await t.test('retries missing punctuation but accepts a complete FreeModel retry', async () => {
       await withFreeModelResponses([
-        freeModelResponse('Đây là câu trả lời đã đầy đủ nhưng không có dấu câu')
+        freeModelResponse('Đây là câu trả lời đã đầy đủ nhưng không có dấu câu'),
+        freeModelResponse('Đây là câu trả lời rút gọn nhưng vẫn đầy đủ ý')
       ], async requests => {
         const answer = await generateAnswer('Hỏi thử', { model: 'test-gemini-model' });
-        assert.equal(answer, 'Đây là câu trả lời đã đầy đủ nhưng không có dấu câu');
-        assert.equal(requests.length, 1);
+        assert.equal(answer, 'Đây là câu trả lời rút gọn nhưng vẫn đầy đủ ý');
+        assert.equal(requests.length, 2);
         assert.ok(requests.every(request => request.url.startsWith('https://freemodel.test/')));
       });
     });

@@ -518,6 +518,9 @@ module.exports = async function handler(req, res) {
       if (searchResults && searchResults.length > 0) {
         searchContext = searchService.buildSearchContext(searchResults);
         console.log(`[WebSearch] Đã nạp ${searchResults.length} nguồn tin từ Internet.`);
+      } else {
+        searchContext = searchService.buildSearchContext([]);
+        console.warn('[WebSearch] Không tìm thấy nguồn phù hợp; yêu cầu AI không suy đoán.');
       }
     }
 
@@ -526,7 +529,7 @@ module.exports = async function handler(req, res) {
     const fullUserContext = quoteText ? `${quoteText}\n${userPrompt}` : userPrompt;
     const contextualQuery = `${fullUserContext}${searchContext}`;
 
-    // 5. Gửi câu hỏi đến Gemini AI (kèm hình ảnh Vision nếu có)
+    // 5. Gửi câu hỏi đến AI provider (kèm hình ảnh Vision nếu có)
     const { action } = await geminiService.generateAnswerWithAction(contextualQuery, {
       history,
       image: imageBuffer
