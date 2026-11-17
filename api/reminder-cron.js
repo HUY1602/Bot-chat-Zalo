@@ -35,13 +35,15 @@ module.exports = async function handler(req, res) {
   try {
     const triggerResult = await reminderService.checkAndTriggerReminders();
 
-    // 2.5 Kiểm tra và kích hoạt Điểm tin buổi sáng (7h30 sáng)
+    // 2.5 Kích hoạt điểm tin trong khung 7:30–7:44 GMT+7
     const forceDigest = req.query?.triggerDigest === 'true' || req.query?.digest === 'force';
     let digestResult = null;
+    let dailyDigestError = null;
     try {
       digestResult = await dailyDigestService.checkAndTriggerMorningDigest(forceDigest);
     } catch (dErr) {
       console.warn('[Reminder Cron] Lỗi kích hoạt daily digest:', dErr.message);
+      dailyDigestError = dErr.message;
     }
 
     // If client requested JSON explicitly
@@ -53,7 +55,8 @@ module.exports = async function handler(req, res) {
         timestamp: new Date().toISOString(),
         triggeredCount: triggerResult.triggeredCount,
         triggered: triggerResult.triggered,
-        dailyDigest: digestResult
+        dailyDigest: digestResult,
+        dailyDigestError
       });
     }
 
@@ -162,7 +165,7 @@ module.exports = async function handler(req, res) {
         Số lượng nhắc việc vừa được kích hoạt: <strong>${triggerResult.triggeredCount}</strong>
       </p>
       <p style="font-size: 14px; margin-top: 8px;">
-        Điểm tin sáng 7h30: <strong>${digestResult?.triggeredCount > 0 ? `Đã gửi ${digestResult.triggeredCount} nhóm!` : (digestResult?.reason || 'Chưa đến giờ')}</strong>
+        Điểm tin sáng (7:30–7:44 GMT+7): <strong>${dailyDigestError || (digestResult?.failedCount > 0 ? `Gửi lỗi ${digestResult.failedCount} nhóm; sẽ thử lại.` : (digestResult?.triggeredCount > 0 ? `Đã gửi ${digestResult.triggeredCount} nhóm!` : (digestResult?.reason || 'Chưa đến giờ')))}</strong>
       </p>
       <div style="margin-top: 12px;">
         <a href="/api/reminder-cron?triggerDigest=true" class="btn-action" style="background: #10b981; font-size: 12px; display: inline-block;">☀️ Thử Gửi Điểm Tin Sáng Ngay</a>

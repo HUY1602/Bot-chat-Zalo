@@ -126,6 +126,14 @@ document.addEventListener('DOMContentLoaded', () => {
               ${envInfo.hasGeminiKey ? '✅ Đã kích hoạt' : '⚠️ Chưa cấu hình'}
             </span>
           </div>
+          <div class="profile-item">
+            <span>Điểm tin buổi sáng:</span>
+            <span class="val" style="color: ${envInfo.hasUpstashRedis ? '#34d399' : '#f87171'};">
+              ${envInfo.morningDigestWindow} · Thời tiết: ${envInfo.defaultWeatherCity} · ${envInfo.hasUpstashRedis
+                ? '✅ Upstash Redis'
+                : '⚠️ Thiếu Upstash Redis; nhóm nhận tin không được lưu bền vững'}
+            </span>
+          </div>
         `;
       } else {
         profileDetails.innerHTML = `

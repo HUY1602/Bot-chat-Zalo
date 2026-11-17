@@ -20,6 +20,7 @@ module.exports = async function handler(req, res) {
     const hasFreeModelKey = Boolean(process.env.FREEMODEL_API_KEY);
     const freeModel = process.env.FREEMODEL_MODEL || 'gpt-6-luna';
     const geminiModel = process.env.GEMINI_MODEL || geminiService.DEFAULT_MODEL;
+    const defaultWeatherCity = process.env.DEFAULT_WEATHER_CITY || 'hanoi';
 
     return res.status(200).json({
       ok: true,
@@ -31,6 +32,8 @@ module.exports = async function handler(req, res) {
         hasWebhookSecret: Boolean(process.env.WEBHOOK_SECRET),
         hasUpstashRedis: memStatus.isUpstash,
         memoryProvider: memStatus.provider,
+        defaultWeatherCity,
+        morningDigestWindow: '07:30–07:44 GMT+7',
         geminiModel,
         preferredModel: hasFreeModelKey ? `FreeModel · ${freeModel}` : `Gemini · ${geminiModel}`,
         avatarUrl: avatarDetails.currentSampleUrl,

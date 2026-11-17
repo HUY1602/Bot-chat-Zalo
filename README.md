@@ -14,7 +14,7 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 - **Trạng Thái Đang Soạn Tin Nhắn Thời Gian Thực (Typing Indicator)**: Tự động kích hoạt trạng thái "đang soạn tin..." (sendChatAction) trên giao diện chat Zalo ngay khi nhận được tin nhắn, tự động duy trì tín hiệu liên tục trong lúc AI đang xử lý (phân tích hình ảnh, tra cứu thông tin mạng, suy nghĩ câu trả lời hoặc sinh ảnh nghệ thuật), giúp người dùng biết bot đang chuẩn bị phản hồi.
 - **Tóm Tắt Cuộc Trò Chuyện Thông Minh (Conversation Recap)**: Tự động trích xuất và tóm tắt súc tích 20 tin nhắn gần nhất trong nhóm bằng AI, phân loại các chủ đề thảo luận chính và các điểm đáng chú ý/thống nhất của các thành viên (tóm tắt cuộc trò chuyện, tóm tắt 20 tin nhắn gần nhất, /tomtat, /summary).
 - **Tra Cứu Google Thời Gian Thực (SerpApi Web Search)**: Tự động phân tích câu hỏi để tra cứu thông tin thời sự, kết quả bóng đá, sự kiện nóng mới nhất trên Google và đối chiếu mốc thời gian thực tế.
-- **Lời Chúc & Điểm Tin Sáng Tự Động (Daily Morning Digest)**: Tự động gửi lời chúc ngày mới, dự báo thời tiết chi tiết (nhiệt độ, nắng/mưa, lời khuyên trang phục/ô dù), thông điệp truyền cảm hứng và tổng hợp các lịch nhắc việc trong ngày của nhóm vào đúng **7h30 sáng hàng ngày** (hoặc gõ `/morning` để xem trước).
+- **Lời Chúc & Điểm Tin Sáng Tự Động (Daily Morning Digest)**: Cron heartbeat chạy mỗi 5 phút và gửi bản tin trong khung **7:30–7:44 sáng (GMT+7)**, chống gửi lặp trong ngày. Địa điểm thời tiết mặc định là Hà Nội; có thể đổi bằng `DEFAULT_WEATHER_CITY` (ví dụ `hcm`). Có thể gõ `/morning` để xem trước.
 - **Hẹn Giờ & Nhắc Việc Thông Minh (Reminders & Scheduler)**: Nhận diện ngôn ngữ tự nhiên tiếng Việt chuẩn xác (`nhắc anh 10 phút nữa...`, `nhắc em mai 8h sáng...`, `14h20 gọi 2 em của anh là Tường và Lộc dậy`, `15h nhắc họp phòng ban`, `/remind 15:30 họp phòng ban`). Hỗ trợ hàng đợi thời gian thực trên **Upstash Redis Delay Queue**, tự động réo chuông thông báo đúng giờ qua GitHub Actions Heartbeat / Cron (`/api/reminder-cron`) hoặc khi có tin nhắn mới trong nhóm. Có lệnh xem danh sách (`/reminders`) và hủy nhắc hẹn (`/huynhac`).
 - **Tạo Ảnh & Vẽ Tranh AI (Text-to-Image)**: Tự động nhận diện yêu cầu vẽ tranh tiếng Việt (`vẽ...` hoặc `/draw...`), tối ưu hóa prompt qua Gemini và tạo tác phẩm nghệ thuật 8K sắc nét (mô hình Flux) gửi trực tiếp vào nhóm Zalo.
 - **Gửi Ảnh Đại Diện Tự Động (Google Drive / CDN)**: Khi thành viên yêu cầu xem mặt / xem hình / xem ảnh của bot, bot sẽ tự động quét thư mục Google Drive và bốc ngẫu nhiên ảnh gửi kèm lời chào dễ thương.
@@ -77,6 +77,7 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 3. **Upstash Redis (Miễn phí)**:
    - Truy cập: [console.upstash.com](https://console.upstash.com)
    - Tạo Database Redis Serverless miễn phí, copy `UPSTASH_REDIS_REST_URL` và `UPSTASH_REDIS_REST_TOKEN`.
+   - Cần thiết để lưu bền vững danh sách nhóm nhận điểm tin giữa các Vercel Serverless Function; chỉ dùng RAM có thể khiến cron không tìm thấy nhóm.
 4. **SerpApi Key (Tùy chọn)**:
    - Đăng ký miễn phí tại [serpapi.com](https://serpapi.com) để bot có khả năng tìm kiếm Google thời gian thực.
 
@@ -92,13 +93,16 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
    - `FREEMODEL_MODEL`: Model dùng qua FreeModel (mặc định `gpt-6-luna`).
    - `GEMINI_API_KEY`: API Key Google Gemini, dùng dự phòng khi FreeModel lỗi.
    - `GEMINI_MODEL`: Model Gemini dự phòng (`gemini-3.5-flash-lite` hoặc `gemini-2.5-flash`).
-   - `UPSTASH_REDIS_REST_URL`: URL REST của Upstash Redis.
+   - `UPSTASH_REDIS_REST_URL`: URL REST của Upstash Redis (cần để lưu bộ nhớ và danh sách nhóm nhận điểm tin).
    - `UPSTASH_REDIS_REST_TOKEN`: Token REST của Upstash Redis.
    - `SERPAPI_API_KEY`: API Key SerpApi (tra cứu Google).
    - `BOT_AVATAR_URL`: Link thư mục Google Drive chứa ảnh avatar (hoặc link ảnh).
+   - `DEFAULT_WEATHER_CITY`: `hanoi` (mặc định), `hcm`, `danang`... cho dự báo thời tiết buổi sáng.
 4. Bấm nút **"Deploy"**. Đợi khoảng 30 giây bạn sẽ nhận được đường link Vercel công khai (ví dụ: `https://bot-chat-zalo-one.vercel.app`).
 
 Khi FreeModel trả lời quá dài hoặc bị ngắt, bot sẽ thử lại FreeModel với yêu cầu trả lời gọn trước; chỉ chuyển sang Gemini nếu FreeModel vẫn lỗi.
+
+Điểm tin được kích hoạt bởi GitHub Actions heartbeat mỗi 5 phút trong khung 7:30–7:44 (GMT+7). Nếu không gửi, kiểm tra tab Actions của repository và trạng thái Upstash trên Dashboard; workflow hiện sẽ báo lỗi gọi Vercel thay vì bỏ qua âm thầm.
 
 ---
 

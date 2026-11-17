@@ -2,7 +2,8 @@ name: Reminder & Daily Digest Heartbeat
 
 on:
   schedule:
-    # Quét định kỳ mỗi 5 phút kích hoạt các nhắc việc đến hạn và bắn Điểm tin sáng 7h30
+    # GitHub Actions uses UTC; 00:30 UTC is 07:30 in Vietnam.
+    # Poll every 5 minutes so missed/delayed starts can recover within the digest window.
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
@@ -13,5 +14,9 @@ jobs:
     steps:
       - name: Trigger Vercel Reminder Cron
         run: |
-          curl -s -f "https://bot-chat-zalo-one.vercel.app/api/reminder-cron?format=json" || true
+          response=$(curl --fail --show-error --silent \
+            --retry 3 --retry-all-errors --retry-delay 10 --max-time 60 \
+            "https://bot-chat-zalo-one.vercel.app/api/reminder-cron?format=json")
+          echo "$response"
+          echo "$response" | jq -e '.dailyDigestError == null and (.dailyDigest.failedCount // 0) == 0' > /dev/null
 
