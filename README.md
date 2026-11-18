@@ -79,7 +79,7 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
    - Tạo Database Redis Serverless miễn phí, copy `UPSTASH_REDIS_REST_URL` và `UPSTASH_REDIS_REST_TOKEN`.
    - Cần thiết để lưu bền vững danh sách nhóm nhận điểm tin giữa các Vercel Serverless Function; chỉ dùng RAM có thể khiến cron không tìm thấy nhóm.
 4. **SerpApi Key (Tùy chọn)**:
-   - Đăng ký miễn phí tại [serpapi.com](https://serpapi.com) để bot có khả năng tìm kiếm Google thời gian thực.
+   - Đăng ký tại [serpapi.com](https://serpapi.com) để ưu tiên tìm kiếm Google thời gian thực. Khi SerpApi hết quota hoặc gặp lỗi, bot sẽ tự động thử DuckDuckGo.
 
 ---
 
