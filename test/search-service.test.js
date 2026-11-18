@@ -21,6 +21,14 @@ test('questions about new or current information trigger web search', () => {
   assert.equal(shouldSearchWeb('Em mới về nhà'), false);
 });
 
+test('explicit Google search requests trigger lookup and clean the command from the query', () => {
+  const request = 'tra google lại xem ngày 24.11 là ngày gì';
+  assert.equal(shouldSearchWeb(request), true);
+  assert.equal(shouldSearchWeb('tra gg ngày 24.11'), true);
+  assert.equal(shouldSearchWeb('tìm trên Google ngày 24.11'), true);
+  assert.equal(cleanSearchQuery(request), 'ngày 24.11 là ngày gì');
+});
+
 test('falls back to DuckDuckGo when SerpApi reports an exhausted quota', async () => {
   const originalApiKey = process.env.SERPAPI_API_KEY;
   const originalFetch = global.fetch;
@@ -43,9 +51,10 @@ test('falls back to DuckDuckGo when SerpApi reports an exhausted quota', async (
   };
 
   try {
-    const results = await searchWeb('tình hình hôm nay');
+    const results = await searchWeb('tra google lại xem ngày 24.11 là ngày gì');
     assert.equal(requestedUrls.length, 2);
     assert.match(requestedUrls[0], /^https:\/\/serpapi\.com\//);
+    assert.equal(new URL(requestedUrls[0]).searchParams.get('q'), 'ngày 24.11 là ngày gì');
     assert.match(requestedUrls[1], /^https:\/\/html\.duckduckgo\.com\//);
     assert.equal(results[0].title, 'Tin cập nhật');
     assert.equal(results[0].snippet, 'Thông tin mới nhất hôm nay.');
