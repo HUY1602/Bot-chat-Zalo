@@ -4,6 +4,7 @@ const {
   buildSearchContext,
   cleanSearchQuery,
   formatSearchResults,
+  isGoogleSearchRequest,
   searchWeb,
   shouldSearchWeb
 } = require('../lib/search-service');
@@ -26,7 +27,36 @@ test('explicit Google search requests trigger lookup and clean the command from 
   assert.equal(shouldSearchWeb(request), true);
   assert.equal(shouldSearchWeb('tra gg ngày 24.11'), true);
   assert.equal(shouldSearchWeb('tìm trên Google ngày 24.11'), true);
+  assert.equal(isGoogleSearchRequest('tra gg tình hình Mỹ với Iran'), true);
   assert.equal(cleanSearchQuery(request), 'ngày 24.11 là ngày gì');
+});
+
+test('does not silently use DuckDuckGo for an explicit Google request without an API key', async () => {
+  const originalSerpApiKey = process.env.SERPAPI_API_KEY;
+  const originalSerpApiAlias = process.env.SERP_API_KEY;
+  const originalFetch = global.fetch;
+  let fetchCalled = false;
+
+  delete process.env.SERPAPI_API_KEY;
+  delete process.env.SERP_API_KEY;
+  global.fetch = async () => {
+    fetchCalled = true;
+    throw new Error('Unexpected network request');
+  };
+
+  try {
+    await assert.rejects(
+      searchWeb('tra gg tình hình Mỹ với Iran'),
+      /Chưa cấu hình SERPAPI_API_KEY/
+    );
+    assert.equal(fetchCalled, false);
+  } finally {
+    global.fetch = originalFetch;
+    if (originalSerpApiKey === undefined) delete process.env.SERPAPI_API_KEY;
+    else process.env.SERPAPI_API_KEY = originalSerpApiKey;
+    if (originalSerpApiAlias === undefined) delete process.env.SERP_API_KEY;
+    else process.env.SERP_API_KEY = originalSerpApiAlias;
+  }
 });
 
 test('falls back to DuckDuckGo when SerpApi reports an exhausted quota', async () => {
@@ -89,4 +119,10 @@ test('formats search-action results without exposing an action marker', () => {
   assert.match(answer, /UEFA Nations League/);
   assert.match(answer, /Đội A 2-1 Đội B/);
   assert.doesNotMatch(answer, /ACTION:SEARCH_WEB/);
+});
+
+test('explicit search with no sources reports that it found nothing instead of inventing an answer', () => {
+  const answer = formatSearchResults([]);
+  assert.match(answer, /chưa tìm được nguồn tin đáng tin cậy/);
+  assert.doesNotMatch(answer, /đã tra cứu kỹ/i);
 });

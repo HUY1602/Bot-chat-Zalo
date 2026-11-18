@@ -18,6 +18,7 @@ module.exports = async function handler(req, res) {
     const localFile = localFiles.length > 0 ? localFiles[0] : null;
     const hasCustomAvatar = Boolean(process.env.BOT_AVATAR_URL || process.env.GOOGLE_DRIVE_FOLDER_ID || localFiles.length > 0);
     const hasFreeModelKey = Boolean(process.env.FREEMODEL_API_KEY);
+    const hasSerpApiKey = Boolean((process.env.SERPAPI_API_KEY || process.env.SERP_API_KEY || '').trim());
     const freeModel = process.env.FREEMODEL_MODEL || 'gpt-6-luna';
     const geminiModel = process.env.GEMINI_MODEL || geminiService.DEFAULT_MODEL;
     const defaultWeatherCity = process.env.DEFAULT_WEATHER_CITY || 'hanoi';
@@ -28,6 +29,8 @@ module.exports = async function handler(req, res) {
         hasZaloToken: Boolean(process.env.ZALO_BOT_TOKEN),
         hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
         hasFreeModelKey,
+        hasSerpApiKey,
+        searchProvider: hasSerpApiKey ? 'SerpAPI (Google), DuckDuckGo dự phòng' : 'DuckDuckGo (chưa cấu hình SerpAPI)',
         freeModel,
         hasWebhookSecret: Boolean(process.env.WEBHOOK_SECRET),
         hasUpstashRedis: memStatus.isUpstash,

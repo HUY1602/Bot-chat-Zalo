@@ -512,9 +512,17 @@ module.exports = async function handler(req, res) {
 
     // 4.5 Kiểm tra xem câu hỏi có cần tra cứu Internet thời gian thực không
     let searchContext = '';
-    if (searchService.shouldSearchWeb(userQuery)) {
+    const explicitGoogleSearch = searchService.isGoogleSearchRequest(userQuery);
+    if (explicitGoogleSearch || searchService.shouldSearchWeb(userQuery)) {
       console.log(`[WebSearch] Đang tìm kiếm thông tin thời gian thực cho: "${userQuery}"`);
       const searchResults = await searchService.searchWeb(userQuery);
+      if (explicitGoogleSearch) {
+        const searchAnswer = searchService.formatSearchResults(searchResults);
+        await memoryService.addTurn(chatId, `[${senderName}]: ${userQuery}`, searchAnswer);
+        await botService.sendMessage(chatId, searchAnswer, msgId);
+        return res.status(200).json({ ok: true, action: 'explicitGoogleSearch', resultCount: searchResults.length });
+      }
+
       if (searchResults && searchResults.length > 0) {
         searchContext = searchService.buildSearchContext(searchResults);
         console.log(`[WebSearch] Đã nạp ${searchResults.length} nguồn tin từ Internet.`);
