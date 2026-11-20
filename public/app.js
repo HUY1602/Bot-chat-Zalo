@@ -24,6 +24,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatForm = document.getElementById('chat-form');
   const chatInput = document.getElementById('chat-input');
   const btnSendChat = document.getElementById('btn-send-chat');
+  const btnTestSearch = document.getElementById('btn-test-search');
+  const searchStatus = document.getElementById('search-status');
+  function showSearchStatus(search) {
+    if (!searchStatus || !search) return;
+    const labels = { ok: 'Có dữ liệu', empty: 'Không có kết quả phù hợp', unavailable: 'Chưa tra cứu được',
+      quota: 'Hết hạn mức', auth: 'Khóa không hợp lệ hoặc thiếu quyền', missing_key: 'Chưa cấu hình khóa',
+      timeout: 'Quá thời gian chờ', blocked: 'Bị chặn truy cập', http: 'Dịch vụ lỗi', network: 'Lỗi kết nối' };
+    const attempts = (search.attempts || []).map(item => `${item.provider}: ${labels[item.status] || item.status}`).join(' • ');
+    searchStatus.textContent = `${labels[search.status] || search.status}${search.provider ? ` (${search.provider})` : ''}. ${attempts}`;
+  }
+  btnTestSearch?.addEventListener('click', async () => {
+    btnTestSearch.disabled = true;
+    searchStatus.textContent = 'Đang kiểm tra dịch vụ tra cứu…';
+    try {
+      const response = await fetch('/api/setup', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test_search', testPrompt: chatInput.value.trim() })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.search) throw new Error(data.error || 'Không chạy được kiểm tra');
+      showSearchStatus(data.search);
+    } catch (error) { searchStatus.textContent = error.message; }
+    finally { btnTestSearch.disabled = false; }
+  });
+
 
   // Auto populate webhook URL with current origin
   function fillCurrentOrigin() {
@@ -41,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await fetch('/api/setup');
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Không thể tải cấu hình');
 
       if (data.ok && data.env) {
         if (data.env.hasZaloToken && (data.env.hasGeminiKey || data.env.hasFreeModelKey)) {
@@ -94,21 +120,21 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="profile-item" style="align-items: center;">
             <span>Ảnh đại diện:</span>
             <div style="display: flex; align-items: center; gap: 8px;">
-              <a href="${envInfo.avatarUrl || '#'}" target="_blank" title="Bấm để xem ảnh gốc">
-                <img src="${envInfo.avatarUrl || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80'}" alt="Bot Avatar" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid #00D2FF; box-shadow: 0 0 10px rgba(0, 210, 255, 0.4); cursor: pointer;">
+              <a href="${escapeHtml(safeImageUrl(envInfo.avatarUrl) || '#')}" target="_blank" title="Bấm để xem ảnh gốc">
+                <img src="${escapeHtml(safeImageUrl(envInfo.avatarUrl) || '')}" alt="Bot Avatar" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid #00D2FF; box-shadow: 0 0 10px rgba(0, 210, 255, 0.4); cursor: pointer;">
               </a>
               <span class="val" style="color: ${envInfo.hasCustomAvatar ? '#34d399' : '#f59e0b'}; font-size: 0.82rem;">
-                ${avatarLabel}
+                ${escapeHtml(avatarLabel)}
               </span>
             </div>
           </div>
           <div class="profile-item">
             <span>Tên Bot:</span>
-            <span class="val">🤖 ${botName}</span>
+            <span class="val">🤖 ${escapeHtml(botName)}</span>
           </div>
           <div class="profile-item">
             <span>ID Bot:</span>
-            <span class="val">${botId}</span>
+            <span class="val">${escapeHtml(botId)}</span>
           </div>
           <div class="profile-item">
             <span>Zalo Bot Token:</span>
@@ -117,7 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="profile-item">
             <span>FreeModel API Key:</span>
             <span class="val" style="color: ${envInfo.hasFreeModelKey ? '#34d399' : '#f59e0b'};">
-              ${envInfo.hasFreeModelKey ? `✅ Ưu tiên · ${envInfo.freeModel}` : '⚠️ Chưa cấu hình'}
+              ${envInfo.hasFreeModelKey ? `✅ Ưu tiên · ${escapeHtml(envInfo.freeModel)}` : '⚠️ Chưa cấu hình'}
             </span>
           </div>
           <div class="profile-item">
@@ -129,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="profile-item">
             <span>Điểm tin buổi sáng:</span>
             <span class="val" style="color: ${envInfo.hasUpstashRedis ? '#34d399' : '#f87171'};">
-              ${envInfo.morningDigestWindow} · Thời tiết: ${envInfo.defaultWeatherCity} · ${envInfo.hasUpstashRedis
+              ${escapeHtml(envInfo.morningDigestWindow)} · Thời tiết: ${escapeHtml(envInfo.defaultWeatherCity)} · ${envInfo.hasUpstashRedis
                 ? '✅ Upstash Redis'
                 : '⚠️ Thiếu Upstash Redis; nhóm nhận tin không được lưu bền vững'}
             </span>
@@ -138,14 +164,14 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         profileDetails.innerHTML = `
           <div style="color: #f87171; font-size: 0.88rem;">
-            ⚠️ Không thể kết nối Zalo Bot Platform (${data.error || 'Kiểm tra ZALO_BOT_TOKEN'}).
+            ⚠️ Không thể kết nối Zalo Bot Platform (${escapeHtml(data.error || 'Kiểm tra ZALO_BOT_TOKEN')}).
           </div>
         `;
       }
     } catch (err) {
       profileDetails.innerHTML = `
         <div style="color: #f87171; font-size: 0.88rem;">
-          ❌ Lỗi: ${err.message}
+          ❌ Lỗi: ${escapeHtml(err.message)}
         </div>
       `;
     }
@@ -157,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
   webhookForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const webhookUrl = webhookUrlInput.value.trim();
-    const secretToken = secretTokenInput.value.trim() || '16022004';
+    const secretToken = secretTokenInput.value.trim();
 
     if (!webhookUrl) return;
 
@@ -250,6 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       removeTypingIndicator(typingId);
 
+      if (data.search) showSearchStatus(data.search);
       if (data.ok) {
         appendMessage('bot', `Bọt biển cute (${data.durationMs}ms)`, data.answer, data.photoUrl);
       } else {
@@ -274,6 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const formattedText = escapeHtml(text).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
     let photoHtml = '';
+    photoUrl = safeImageUrl(photoUrl);
     if (photoUrl) {
       photoHtml = `
         <div class="msg-photo" style="margin-top: 10px;">
@@ -316,12 +344,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (el) el.remove();
   }
 
+  function safeImageUrl(value) {
+    try {
+      const url = new URL(value, window.location.origin);
+      return ['https:', 'http:'].includes(url.protocol) ? url.href : '';
+    } catch { return ''; }
+  }
+
   function escapeHtml(str) {
     if (!str) return '';
-    return str
+    return String(str)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   // Initial load

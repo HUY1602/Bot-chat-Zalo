@@ -1,5 +1,61 @@
 # Zalo Gemini Bot - Trợ Lý AI Hỏi Đáp Nhóm 24/7 (Vercel Serverless)
 
+## Tra cứu thông tin mới và kiểm tra lỗi tìm kiếm
+
+Webhook Zalo và khung chat thử dùng chung luồng tra cứu: nhận diện câu hỏi cần cập nhật → tìm nguồn → tổng hợp trực tiếp → đính kèm đường dẫn. Câu hỏi tiếp nối ngắn dùng câu hỏi gần đây của chính người gửi để bổ sung chủ đề; không lấy câu trả lời cũ của AI làm nguồn. Ngày tương đối như “hôm qua” được gắn ngày Việt Nam khi tìm kiếm. Bộ lọc giữ nguồn chính phủ, thời gian đăng và loại link trùng hoặc kết quả rõ ràng khác năm được hỏi.
+
+Thứ tự dịch vụ:
+
+1. Google qua `SERPAPI_API_KEY` (cũng nhận `SERP_API_KEY`). Nếu kết quả rỗng, thử Google News một lần. Bộ lọc ngày được dùng cho yêu cầu có dấu hiệu thời sự, không ép mọi câu hỏi vào 24 giờ gần nhất.
+2. Gemini có công cụ Google Search, dùng `GEMINI_API_KEY`, khi bước trên không có dữ liệu hoặc lỗi. Chỉ nhận khi Google trả metadata nguồn và đoạn văn được nguồn hỗ trợ. Cấu hình `GEMINI_SEARCH_MODEL` (mặc định `gemini-3.5-flash-lite`); đặt `GEMINI_SEARCH_ENABLED=false` để tắt. Tính năng có hạn mức/chi phí riêng; xem [tài liệu Google Search grounding](https://ai.google.dev/gemini-api/docs/google-search).
+3. DuckDuckGo HTML làm dự phòng; có thể bị chặn hoặc timeout. Bot nhận diện các lỗi này thay vì coi như đã tìm kiếm thành công.
+
+Nếu tất cả dịch vụ lỗi, bot báo ngắn gọn chưa xác minh được. Nếu tìm được nguồn nhưng AI tổng hợp lỗi, bot gửi trích đoạn và link. Trích đoạn có thể thiếu/cũ; bot chỉ nên khẳng định phần có chứng cứ, không tự quyết định sự kiện vẫn sắp diễn ra từ cách viết “sẽ” trong bài cũ. Luồng tra cứu có giới hạn thời gian và số lần thử để tránh chờ kéo dài.
+
+Trong dashboard đã đăng nhập, nhập câu hỏi rồi bấm **Kiểm tra tra cứu** để xem trạng thái từng dịch vụ: `quota` (hết lượt), `auth` (khóa/quyền), `timeout`, `blocked`, `empty`. Khung chat thử cũng hiển thị chẩn đoán. Có cấu hình khóa không đồng nghĩa còn hạn mức.
+
+Có thể chạy `node scripts/check-search.js "hội nghị thượng đỉnh APEC 2026 diễn ra ở đâu"`. Lệnh chỉ đọc dữ liệu, không gửi tin Zalo và không in khóa. API tương đương: `POST /api/setup` với body `{"action":"test_search","testPrompt":"câu hỏi"}` và xác thực quản trị. Cần duy trì hạn mức ít nhất một nhà cung cấp; sửa mã không khôi phục được quota đã hết. Không commit `.env` hoặc đưa khóa vào URL.
+
+## Nhắc việc lặp lại, sửa và hoãn lịch
+
+Các lệnh dùng giờ Việt Nam (UTC+7). Bot trả ID trong tin xác nhận, `/reminders` và thông báo khi đến hạn. Thay `ID` dưới đây bằng mã `remind_...` thực tế.
+
+| Nhu cầu | Ví dụ |
+|---|---|
+| Nhắc mỗi ngày | `/repeat daily 08:00 uống nước` |
+| Nhắc mỗi tuần | `/repeat weekly mon 08:00 họp nhóm` |
+| Tiếng Việt tự nhiên | `nhắc tôi mỗi ngày lúc 8h uống nước`, `Mỗi thứ Hai lúc 8h nhắc họp` |
+| Hoãn kể từ bây giờ | `/hoannhac ID 15m`, `/snooze ID 2h`, `hoãn ID 15 phút` |
+| Sửa nội dung | `/suanhac ID noi-dung Gửi báo cáo dự án` |
+| Sửa lần nhắc kế tiếp | `/suanhac ID gio 08:30`, `/suanhac ID gio mai 08:30` |
+| Hủy chuỗi nhắc | `/huynhac ID` |
+
+`/lap` là tên khác của `/repeat`; thứ có thể dùng `mon`–`sun`, `2`–`7`, `cn` hoặc `thứ Hai`… `Chủ nhật`. Chỉ hỗ trợ chu kỳ hằng ngày hoặc hằng tuần vào một thứ cụ thể; các chu kỳ khác hoặc thiếu giờ/nội dung sẽ được yêu cầu nhập lại, không tự đổi thành nhắc một lần.
+
+Chỉ người tạo lịch được sửa hoặc hoãn, trong đúng nhóm đã tạo. Thời gian hoãn từ 1 phút đến 30 ngày, tính từ lúc gửi lệnh. Nếu sửa giờ không ghi `mai` và giờ đó đã qua, bot chọn ngày mai. Với lịch lặp, sửa giờ/hoãn chỉ thay đổi lần kế tiếp; các lần tiếp theo quay lại giờ lặp gốc. Để đổi hẳn chu kỳ, hủy và tạo lại lịch. Lịch một lần vừa gửi có thể hoãn bằng ID trong 24 giờ, dù không còn hiển thị ở danh sách đang chờ.
+
+Sau khi gửi thành công, lịch lặp giữ nguyên ID và chuyển sang mốc tiếp theo trong tương lai; các mốc đã bỏ lỡ không được gửi dồn. Nếu gửi lỗi, bot thử lại cùng lần nhắc tối đa 5 lần rồi tạm dừng lịch. Sửa nội dung không tự kích hoạt lại lịch lỗi; sửa giờ hoặc hoãn sẽ kích hoạt lại. Gửi vẫn phụ thuộc lịch cron, mặc định mỗi 5 phút. Cần Upstash để lưu lịch và khóa xử lý bền vững trên Vercel.
+
+Không cần thêm API key hoặc gói phụ thuộc mới cho các tính năng này. Giữ các cấu hình bảo mật/Redis ở mục bên dưới khi deploy. Lịch cũ không có trường `recurrence` tiếp tục là lịch một lần.
+
+
+## Cập nhật bảo mật và độ ổn định
+
+Trước khi triển khai bản cập nhật:
+
+1. Đặt ba biến môi trường riêng biệt trên Vercel: `ADMIN_SECRET`, `WEBHOOK_SECRET`, `CRON_SECRET`. Dùng các chuỗi ngẫu nhiên dài; không dùng mã mặc định cũ. Khi thiếu khóa, endpoint tương ứng từ chối hoạt động.
+2. Đặt GitHub repository secret `CRON_SECRET` giống giá trị trên Vercel. Workflow heartbeat đã gửi header xác thực. Cron ngoài cũng phải gửi `Authorization: Bearer <CRON_SECRET>`.
+3. Sau khi deploy, bấm **Đăng nhập quản trị**, nhập username `admin`, password là `ADMIN_SECRET`. Chỉ sử dụng HTTPS khi truy cập bản triển khai. Trình duyệt lưu thông tin HTTP Basic trong phiên; đóng phiên trình duyệt khi dùng máy chung. API quản trị cũng chấp nhận `Authorization: Bearer <ADMIN_SECRET>`.
+4. Đăng ký lại webhook từ dashboard để Zalo gửi đúng `WEBHOOK_SECRET`. Có thể để trống ô secret trên dashboard để dùng cấu hình máy chủ; nếu nhập phải trùng cấu hình. Không dán khóa bí mật vào URL hoặc commit `.env`.
+5. Cấu hình Upstash Redis để chống xử lý trùng giữa các serverless instance. Khi Redis đã cấu hình nhưng lỗi, thao tác lưu/khóa sẽ báo lỗi thay vì tự chuyển sang RAM. RAM chỉ phục vụ chạy cục bộ khi chưa cấu hình Redis.
+
+Nhắc việc gửi lỗi được thử lại tối đa 5 lần, có khoảng chờ tăng dần. Sau đó lịch được giữ ở trạng thái `failed` và vẫn có trong `/reminders`; hãy kiểm tra kết nối rồi sửa giờ hoặc hoãn để kích hoạt lại. `/huynhac` yêu cầu ID hoặc `all`; thành viên chỉ hủy được lịch của chính mình. Lịch cũ không có `userId` cần quản trị viên hủy qua API đã xác thực. Ví dụ: `DELETE /api/reminder-cron?chatId=...&id=...` (hoặc `id=all`).
+
+Webhook chống lặp theo cặp chat/message ID trong 24 giờ. Lịch sử Redis vẫn giữ định dạng JSON cũ nhưng được nối thêm nguyên tử để tránh ghi đè khi nhiều tin đến cùng lúc. Khóa ngăn các worker gửi nhắc việc đồng thời; nếu tiến trình dừng đúng lúc Zalo đã nhận tin nhưng chưa lưu trạng thái, lần thử lại vẫn có thể gửi trùng vì không có giao dịch chung với Zalo. Heartbeat mặc định mỗi 5 phút nên nhắc việc có thể trễ theo lịch chạy; tác vụ cron chịu trách nhiệm kích hoạt lịch trên Vercel.
+
+Chạy `npm test` để kiểm tra AI/search/digest và các ca xác thực, webhook trùng, XSS bộ nhớ, hủy nhầm, lưu lịch sử đồng thời, retry và xử lý nhắc việc đồng thời. Các bài test dùng giả lập, không gửi tin nhắn Zalo thật.
+
+
 Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemini AI** (`gemini-3.5-flash`), triển khai hoàn toàn **miễn phí trên Vercel** theo mô hình Serverless Function hoạt động bền bỉ **24/7** không cần máy chủ riêng.
 
 ---
@@ -15,7 +71,7 @@ Dự án Bot Zalo cá nhân / nhóm chat thông minh, tích hợp **Google Gemin
 - **Tóm Tắt Cuộc Trò Chuyện Thông Minh (Conversation Recap)**: Tự động trích xuất và tóm tắt súc tích 20 tin nhắn gần nhất trong nhóm bằng AI, phân loại các chủ đề thảo luận chính và các điểm đáng chú ý/thống nhất của các thành viên (tóm tắt cuộc trò chuyện, tóm tắt 20 tin nhắn gần nhất, /tomtat, /summary).
 - **Tra Cứu Google Thời Gian Thực (SerpApi Web Search)**: Tự động phân tích câu hỏi để tra cứu thông tin thời sự, kết quả bóng đá, sự kiện nóng mới nhất trên Google và đối chiếu mốc thời gian thực tế.
 - **Lời Chúc & Điểm Tin Sáng Tự Động (Daily Morning Digest)**: Cron heartbeat chạy mỗi 5 phút và gửi bản tin trong khung **7:30–7:44 sáng (GMT+7)**, chống gửi lặp trong ngày. Địa điểm thời tiết mặc định là Hà Nội; có thể đổi bằng `DEFAULT_WEATHER_CITY` (ví dụ `hcm`). Có thể gõ `/morning` để xem trước.
-- **Hẹn Giờ & Nhắc Việc Thông Minh (Reminders & Scheduler)**: Nhận diện ngôn ngữ tự nhiên tiếng Việt chuẩn xác (`nhắc anh 10 phút nữa...`, `nhắc em mai 8h sáng...`, `14h20 gọi 2 em của anh là Tường và Lộc dậy`, `15h nhắc họp phòng ban`, `/remind 15:30 họp phòng ban`). Hỗ trợ hàng đợi thời gian thực trên **Upstash Redis Delay Queue**, tự động réo chuông thông báo đúng giờ qua GitHub Actions Heartbeat / Cron (`/api/reminder-cron`) hoặc khi có tin nhắn mới trong nhóm. Có lệnh xem danh sách (`/reminders`) và hủy nhắc hẹn (`/huynhac`).
+- **Hẹn Giờ & Nhắc Việc Thông Minh (Reminders & Scheduler)**: Nhận diện ngôn ngữ tự nhiên tiếng Việt chuẩn xác (`nhắc anh 10 phút nữa...`, `nhắc em mai 8h sáng...`, `14h20 gọi 2 em của anh là Tường và Lộc dậy`, `15h nhắc họp phòng ban`, `/remind 15:30 họp phòng ban`). Hỗ trợ hàng đợi thời gian thực trên **Upstash Redis Delay Queue**, gửi thông báo qua GitHub Actions Heartbeat / Cron (`/api/reminder-cron`); độ trễ phụ thuộc thời điểm cron chạy. Có lệnh xem danh sách (`/reminders`) và hủy nhắc hẹn (`/huynhac`).
 - **Tạo Ảnh & Vẽ Tranh AI (Text-to-Image)**: Tự động nhận diện yêu cầu vẽ tranh tiếng Việt (`vẽ...` hoặc `/draw...`), tối ưu hóa prompt qua Gemini và tạo tác phẩm nghệ thuật 8K sắc nét (mô hình Flux) gửi trực tiếp vào nhóm Zalo.
 - **Gửi Ảnh Đại Diện Tự Động (Google Drive / CDN)**: Khi thành viên yêu cầu xem mặt / xem hình / xem ảnh của bot, bot sẽ tự động quét thư mục Google Drive và bốc ngẫu nhiên ảnh gửi kèm lời chào dễ thương.
 - **Hỗ Trợ Nhóm Chat Zalo Tuyệt Vời**:

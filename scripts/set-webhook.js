@@ -5,12 +5,16 @@
  */
 
 require('dotenv').config();
-const { setWebhook, getBotInfo, testWebhook } = require('../lib/');
+const { setWebhook, getBotInfo, testWebhook } = require('../lib/bot-service');
 
 async function main() {
   const urlArg = process.argv[2];
   const secretArg = process.argv[3] || process.env.WEBHOOK_SECRET;
   const token = process.env.ZALO_BOT_TOKEN;
+  if (!process.env.WEBHOOK_SECRET || secretArg !== process.env.WEBHOOK_SECRET) {
+    console.error('Cần cấu hình WEBHOOK_SECRET; secret đăng ký phải trùng cấu hình máy chủ.');
+    process.exit(1);
+  }
 
   if (!token) {
     console.error('❌ Lỗi: Chưa cấu hình ZALO_BOT_TOKEN trong file .env');

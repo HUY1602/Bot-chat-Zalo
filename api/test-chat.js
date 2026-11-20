@@ -6,16 +6,18 @@
 const geminiService = require('../lib/gemini-service');
 const avatarService = require('../lib/avatar-service');
 const imageService = require('../lib/image-service');
-const searchService = require('../lib/search-service');
+
+const { requireAdmin } = require('../lib/auth');
 
 module.exports = async function handler(req, res) {
+  if (!requireAdmin(req, res)) return;
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
   const { message, apiKey, model } = req.body || {};
 
-  if (!message) {
+  if (typeof message !== 'string' || !message.trim() || message.length > 12000) {
     return res.status(400).json({ ok: false, error: 'Vui lòng cung cấp nội dung câu hỏi' });
   }
 
@@ -39,20 +41,11 @@ module.exports = async function handler(req, res) {
   try {
     const startTime = Date.now();
 
-    // Kiểm tra xem câu hỏi có cần tra cứu Internet thời gian thực không
-    let searchContext = '';
-    if (searchService.shouldSearchWeb(message)) {
-      const searchResults = await searchService.searchWeb(message);
-      if (searchResults && searchResults.length > 0) {
-        searchContext = searchService.buildSearchContext(searchResults);
-      } else {
-        searchContext = searchService.buildSearchContext([]);
-      }
-    }
-
-    const { action } = await geminiService.generateAnswerWithAction(`[Bạn]: ${message}${searchContext}`, {
+    const { action, search } = await geminiService.generateAnswerWithAction(`[Bạn]: ${message}`, {
       apiKey: apiKey || process.env.GEMINI_API_KEY,
-      model: model || process.env.GEMINI_MODEL
+      model: model || process.env.GEMINI_MODEL,
+      searchQuery: message,
+      senderName: 'Bạn'
     });
     const duration = Date.now() - startTime;
 
@@ -81,6 +74,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       answer: action.text,
+      search: search || null,
       durationMs: duration
     });
   } catch (err) {

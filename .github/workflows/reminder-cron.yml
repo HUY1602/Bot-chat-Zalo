@@ -13,10 +13,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Vercel Reminder Cron
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
+          test -n "$CRON_SECRET" || { echo "Missing CRON_SECRET"; exit 1; }
           response=$(curl --fail --show-error --silent \
+            -H "Authorization: Bearer $CRON_SECRET" \
             --retry 3 --retry-all-errors --retry-delay 10 --max-time 60 \
             "https://bot-chat-zalo-one.vercel.app/api/reminder-cron?format=json")
           echo "$response"
-          echo "$response" | jq -e '.dailyDigestError == null and (.dailyDigest.failedCount // 0) == 0' > /dev/null
+          echo "$response" | jq -e '(.failedCount // 0) == 0 and .dailyDigestError == null and (.dailyDigest.failedCount // 0) == 0' > /dev/null
 

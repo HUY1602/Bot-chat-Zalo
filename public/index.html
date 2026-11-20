@@ -38,6 +38,7 @@
       </div>
 
       <div class="header-status">
+        <a href="/api/setup?login=1" class="nav-link-btn">Đăng nhập quản trị</a>
         <a href="/api/memory" target="_blank" class="nav-link-btn" title="Xem bộ nhớ Redis hội thoại">
           <span>💾 Bộ Nhớ Hội Thoại</span>
         </a>
@@ -83,10 +84,10 @@
 
           <label for="secret-token">Khóa bí mật Webhook (Secret Token):</label>
           <input 
-            type="text" 
+            type="password"
             id="secret-token" 
-            value="16022004"
-            placeholder="16022004"
+            value=""
+            placeholder="Để trống để dùng cấu hình máy chủ"
           >
 
           <div class="btn-group">
@@ -126,6 +127,12 @@
         <p class="card-desc">
           Thử đặt câu hỏi để kiểm tra định dạng phản hồi tối ưu cho Zalo trước khi chạy trong nhóm thực tế.
         </p>
+
+        <div class="profile-header">
+          <span class="sub-label">TRA CỨU THÔNG TIN MỚI</span>
+          <button id="btn-test-search" class="btn-text" type="button">Kiểm tra tra cứu</button>
+        </div>
+        <p id="search-status" class="card-desc" role="status" aria-live="polite">Kiểm tra bằng câu hỏi đang nhập; để trống để thử câu hỏi APEC.</p>
 
         <div class="chat-viewport" id="chat-viewport">
           <div class="chat-message bot-msg">

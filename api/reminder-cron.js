@@ -10,24 +10,25 @@
 
 const reminderService = require('../lib/reminder-service');
 const dailyDigestService = require('../lib/daily-digest-service');
+const { requireAdmin, equalSecret } = require('../lib/auth');
+const { escapeHtml } = require('../lib/html');
 
 module.exports = async function handler(req, res) {
-  // Allow optional secret token check for cron requests
-  const cronSecret = process.env.CRON_SECRET || process.env.WEBHOOK_SECRET;
-  const authHeader = req.headers['authorization'];
-  if (cronSecret && authHeader && authHeader !== `Bearer ${cronSecret}`) {
-    // If auth header is provided but invalid
-    return res.status(401).json({ ok: false, error: 'Unauthorized cron token' });
-  }
+  const cronRequest = equalSecret(req.headers?.authorization, process.env.CRON_SECRET ? `Bearer ${process.env.CRON_SECRET}` : '');
+  if (!cronRequest && !requireAdmin(req, res)) return;
+  if (!['GET', 'POST', 'DELETE'].includes(req.method)) return res.status(405).json({ ok: false });
+  res.setHeader('Cache-Control', 'no-store');
 
   // 1. DELETE / POST to cancel reminder: ?action=cancel&id=xxx&chatId=yyy
   if (req.method === 'DELETE' || req.query?.action === 'cancel') {
+    if (cronRequest) return res.status(403).json({ ok: false, error: 'Admin access required' });
+    if (req.method === 'GET') return res.status(405).json({ ok: false, error: 'Use POST or DELETE to cancel' });
     const reminderId = req.query?.id || req.body?.id;
     const chatId = req.query?.chatId || req.body?.chatId;
-    if (!chatId) {
+    if (!chatId || !reminderId) {
       return res.status(400).json({ ok: false, error: 'Thiếu chatId' });
     }
-    const result = await reminderService.cancelReminder(chatId, reminderId || 'all');
+    const result = await reminderService.cancelReminder(chatId, reminderId);
     return res.status(200).json({ ok: true, message: `Đã hủy ${result.count} nhắc việc!`, result });
   }
 
@@ -36,7 +37,7 @@ module.exports = async function handler(req, res) {
     const triggerResult = await reminderService.checkAndTriggerReminders();
 
     // 2.5 Kích hoạt điểm tin trong khung 7:30–7:44 GMT+7
-    const forceDigest = req.query?.triggerDigest === 'true' || req.query?.digest === 'force';
+    const forceDigest = !cronRequest && req.method === 'POST' && (req.body?.triggerDigest === true || req.body?.triggerDigest === 'true');
     let digestResult = null;
     let dailyDigestError = null;
     try {
@@ -54,6 +55,7 @@ module.exports = async function handler(req, res) {
         service: 'Zalo Bot Reminder Cron',
         timestamp: new Date().toISOString(),
         triggeredCount: triggerResult.triggeredCount,
+        failedCount: triggerResult.failedCount || 0,
         triggered: triggerResult.triggered,
         dailyDigest: digestResult,
         dailyDigestError
@@ -165,16 +167,16 @@ module.exports = async function handler(req, res) {
         Số lượng nhắc việc vừa được kích hoạt: <strong>${triggerResult.triggeredCount}</strong>
       </p>
       <p style="font-size: 14px; margin-top: 8px;">
-        Điểm tin sáng (7:30–7:44 GMT+7): <strong>${dailyDigestError || (digestResult?.failedCount > 0 ? `Gửi lỗi ${digestResult.failedCount} nhóm; sẽ thử lại.` : (digestResult?.triggeredCount > 0 ? `Đã gửi ${digestResult.triggeredCount} nhóm!` : (digestResult?.reason || 'Chưa đến giờ')))}</strong>
+        Điểm tin sáng (7:30–7:44 GMT+7): <strong>${escapeHtml(dailyDigestError) || (digestResult?.failedCount > 0 ? `Gửi lỗi ${digestResult.failedCount} nhóm; sẽ thử lại.` : (digestResult?.triggeredCount > 0 ? `Đã gửi ${digestResult.triggeredCount} nhóm!` : (digestResult?.reason || 'Chưa đến giờ')))}</strong>
       </p>
       <div style="margin-top: 12px;">
-        <a href="/api/reminder-cron?triggerDigest=true" class="btn-action" style="background: #10b981; font-size: 12px; display: inline-block;">☀️ Thử Gửi Điểm Tin Sáng Ngay</a>
+        <form method="post" action="/api/reminder-cron"><input type="hidden" name="triggerDigest" value="true"><button class="btn-action" type="submit">☀️ Thử Gửi Điểm Tin Sáng Ngay</button></form>
       </div>
 
       <div class="tip-box">
         <strong>💡 Thiết lập Cron tự động 24/7:</strong><br>
-        • <strong>Vercel Cron</strong>: Đã được cấu hình tự động trong <code>vercel.json</code>.<br>
-        • <strong>Cron-job.org / Miễn phí</strong>: Đăng ký tại <a href="https://cron-job.org" target="_blank" style="color: #60a5fa;">cron-job.org</a>, tạo job gọi URL <code>https://&lt;domain-cua-ban&gt;/api/reminder-cron</code> mỗi 1 phút một lần để bot bắn thông báo đúng từng phút!
+        • <strong>GitHub Actions</strong>: Workflow chạy mỗi 5 phút; cần repository secret <code>CRON_SECRET</code> trùng cấu hình máy chủ.<br>
+        • <strong>Cron-job.org / Miễn phí</strong>: Đăng ký tại <a href="https://cron-job.org" target="_blank" style="color: #60a5fa;">cron-job.org</a>, tạo job gọi URL <code>https://&lt;domain-cua-ban&gt;/api/reminder-cron</code> với header <code>Authorization: Bearer CRON_SECRET</code>. Độ trễ nhắc việc phụ thuộc chu kỳ và thời điểm cron thực sự chạy.
       </div>
     </div>
   </div>

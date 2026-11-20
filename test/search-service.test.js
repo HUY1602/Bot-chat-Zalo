@@ -1,128 +1,134 @@
 const assert = require('node:assert/strict');
-const { test } = require('node:test');
-const {
-  buildSearchContext,
-  cleanSearchQuery,
-  formatSearchResults,
-  isGoogleSearchRequest,
-  searchWeb,
-  shouldSearchWeb
-} = require('../lib/search-service');
+const { test, beforeEach, afterEach } = require('node:test');
+const search = require('../lib/search-service');
+let originalEnv, originalFetch;
+beforeEach(() => {
+  originalEnv = { ...process.env }; originalFetch = global.fetch;
+  for (const name of ['SERPAPI_API_KEY', 'SERP_API_KEY', 'GEMINI_API_KEY']) delete process.env[name];
+  global.fetch = async () => { throw new Error('Unexpected network request'); };
+});
+afterEach(() => { process.env = originalEnv; global.fetch = originalFetch; });
+const json = body => ({ ok: true, json: async () => body });
+const ddg = '<div class="result results_links"><a href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fnews.test%2Fapec" class="result__a">APEC cập nhật</a><div class="result__snippet">Hội nghị APEC tổ chức tại Thâm Quyến &amp; có thông tin mới.</div></div>';
 
-test('sports results questions trigger current web search', () => {
-  assert.equal(shouldSearchWeb('cập nhật kết quả lượt trận nation league đêm qua'), true);
-  assert.equal(shouldSearchWeb('tất cả các trận diễn ra đêm qua'), true);
-  assert.match(cleanSearchQuery('kết quả nation league đêm qua'), /UEFA Nations League/i);
+test('new information is searched even when preceded by greetings or bot names', () => {
+  for (const query of ['hội nghị thượng đỉnh APEC 2026 diễn ra ở đâu', 'Em ơi cập nhật APEC mới nhất', 'Chào em, APEC diễn ra ở đâu?', 'Cảm ơn, cho hỏi CEO công ty XYZ hiện nay là ai?', 'tra cứu thông tin sản phẩm XYZ', 'tổng thống hiện tại là ai', 'nghị định mới có hiệu lực khi nào', 'cập nhật kết quả lượt trận nation league đêm qua', 'tất cả các trận diễn ra đêm qua', 'Tình hình dự án XYZ hôm nay ra sao?', 'Có cập nhật mới về mẫu điện thoại XYZ không?', 'iPhone mới?', 'tra gg tình hình Mỹ với Iran']) assert.equal(search.shouldSearchWeb(query), true, query);
+  for (const query of ['Em mới về nhà', 'xin chào', 'cảm ơn em', '/ping', '/repeat daily 08:00 uống nước', '/suanhac remind_1_abc gio 08:00', 'viết cho anh bài thơ', 'em tên gì']) assert.equal(search.shouldSearchWeb(query), false, query);
 });
 
-test('questions about new or current information trigger web search', () => {
-  assert.equal(shouldSearchWeb('Tình hình dự án XYZ hôm nay ra sao?'), true);
-  assert.equal(shouldSearchWeb('Có cập nhật mới về mẫu điện thoại XYZ không?'), true);
-  assert.equal(shouldSearchWeb('iPhone mới?'), true);
-  assert.equal(shouldSearchWeb('Em mới về nhà'), false);
+test('queries retain the requested subject, expand follow-ups from user history and anchor relative days', () => {
+  assert.equal(search.cleanSearchQuery('tra google lại xem ngày 24.11 là ngày gì'), 'ngày 24.11 là ngày gì');
+  assert.match(search.cleanSearchQuery('kết quả nation league đêm qua'), /UEFA Nations League/);
+  const now = new Date('2026-11-20T03:00:00Z');
+  const history = [
+    { role: 'user', parts: [{ text: '[Huy]: Hội nghị APEC 2026 diễn ra ở đâu' }] },
+    { role: 'model', parts: [{ text: 'Một sự kiện không liên quan do AI bịa ra.' }] },
+    { role: 'user', parts: [{ text: '[Lan]: Giá vàng hôm nay' }] }
+  ];
+  const query = search.buildSearchQuery('Thế còn lịch trình sự kiện đó?', history, 'Huy', now);
+  assert.match(query, /APEC 2026/); assert.doesNotMatch(query, /Giá vàng|AI bịa/);
+  assert.match(search.buildSearchQuery('kết quả trận đêm qua', [], '', now), /2026-11-19/);
 });
 
-test('explicit Google search requests trigger lookup and clean the command from the query', () => {
-  const request = 'tra google lại xem ngày 24.11 là ngày gì';
-  assert.equal(shouldSearchWeb(request), true);
-  assert.equal(shouldSearchWeb('tra gg ngày 24.11'), true);
-  assert.equal(shouldSearchWeb('tìm trên Google ngày 24.11'), true);
-  assert.equal(isGoogleSearchRequest('tra gg tình hình Mỹ với Iran'), true);
-  assert.equal(cleanSearchQuery(request), 'ngày 24.11 là ngày gì');
+test('missing Google key transparently uses fallback rather than failing explicit search', async () => {
+  global.fetch = async () => ({ ok: true, text: async () => ddg });
+  const report = await search.searchWebDetailed('tra google APEC 2026 ở đâu');
+  assert.equal(report.status, 'ok'); assert.equal(report.provider, 'DuckDuckGo');
+  assert.deepEqual(report.attempts[0], { provider: 'Google', status: 'missing_key' });
+  assert.equal(report.results[0].url, 'https://news.test/apec');
 });
 
-test('does not silently use DuckDuckGo for an explicit Google request without an API key', async () => {
-  const originalSerpApiKey = process.env.SERPAPI_API_KEY;
-  const originalSerpApiAlias = process.env.SERP_API_KEY;
-  const originalFetch = global.fetch;
-  let fetchCalled = false;
-
-  delete process.env.SERPAPI_API_KEY;
-  delete process.env.SERP_API_KEY;
-  global.fetch = async () => {
-    fetchCalled = true;
-    throw new Error('Unexpected network request');
+test('quota errors fall back and preserve source URLs and decoded snippets', async () => {
+  process.env.SERPAPI_API_KEY = 'test-key';
+  const requests = [];
+  global.fetch = async (url, options) => {
+    requests.push({ url: String(url), options });
+    return String(url).startsWith('https://serpapi.com/') ? json({ error: 'Searches per month limit reached' }) : { ok: true, text: async () => ddg };
   };
-
-  try {
-    await assert.rejects(
-      searchWeb('tra gg tình hình Mỹ với Iran'),
-      /Chưa cấu hình SERPAPI_API_KEY/
-    );
-    assert.equal(fetchCalled, false);
-  } finally {
-    global.fetch = originalFetch;
-    if (originalSerpApiKey === undefined) delete process.env.SERPAPI_API_KEY;
-    else process.env.SERPAPI_API_KEY = originalSerpApiKey;
-    if (originalSerpApiAlias === undefined) delete process.env.SERP_API_KEY;
-    else process.env.SERP_API_KEY = originalSerpApiAlias;
-  }
+  const report = await search.searchWebDetailed('tra google APEC mới nhất');
+  assert.equal(requests.length, 2);
+  assert.equal(new URL(requests[0].url).searchParams.get('tbs'), 'qdr:w');
+  assert.ok(requests.every(request => request.options.signal));
+  assert.equal(report.results[0].snippet, 'Hội nghị APEC tổ chức tại Thâm Quyến & có thông tin mới.');
+  assert.equal(report.attempts[0].status, 'quota');
 });
 
-test('falls back to DuckDuckGo when SerpApi reports an exhausted quota', async () => {
-  const originalApiKey = process.env.SERPAPI_API_KEY;
-  const originalFetch = global.fetch;
-  const requestedUrls = [];
+test('official legal sources and article dates are kept, unrelated and duplicate links removed', async () => {
+  process.env.SERPAPI_API_KEY = 'test';
+  global.fetch = async () => json({ organic_results: [
+    { title: 'Nghị định mới của Chính phủ', snippet: 'Nghị định ABC áp dụng từ ngày 20/11/2026.', link: 'https://chinhphu.vn/nghi-dinh-abc', date: 'Nov 19, 2026' },
+    { title: 'Nghị định ABC', snippet: 'Nội dung trùng', link: 'https://chinhphu.vn/nghi-dinh-abc?utm_source=feed' },
+    { title: 'Kết quả bóng đá', snippet: 'Đội A thắng', link: 'https://sports.test/result' }
+  ], ai_overview: { text_blocks: [{ snippet: 'Không có nguồn độc lập' }] } });
+  const report = await search.searchWebDetailed('nghị định ABC mới áp dụng khi nào');
+  assert.equal(report.results.length, 1);
+  assert.equal(report.results[0].publishedAt, 'Nov 19, 2026');
+  assert.equal(report.results[0].url, 'https://chinhphu.vn/nghi-dinh-abc');
+  assert.equal(report.attempts.length, 1);
+});
 
-  process.env.SERPAPI_API_KEY = 'test-serpapi-key';
+test('empty Google results retry news once and handle nested articles', async () => {
+  process.env.SERPAPI_API_KEY = 'test';
+  const engines = [];
   global.fetch = async url => {
-    requestedUrls.push(String(url));
-    if (String(url).startsWith('https://serpapi.com/')) {
-      return {
-        ok: true,
-        json: async () => ({ error: 'Searches per month limit reached' })
-      };
-    }
-
-    return {
-      ok: true,
-      text: async () => '<div class="result results_links"><a class="result__a">Tin cập nhật</a><a class="result__snippet">Thông tin mới nhất hôm nay.</a></div>'
-    };
+    const engine = new URL(url).searchParams.get('engine'); engines.push(engine);
+    return engine === 'google' ? json({ organic_results: [] }) : json({ news_results: [{ title: 'APEC', stories: [{ title: 'APEC 2026 tại Thâm Quyến', snippet: 'Hội nghị ngày 18–19/11.', link: 'https://apec.org/2026', iso_date: '2026-11-19T00:00:00Z', source: { name: 'APEC' } }] }] });
   };
-
-  try {
-    const results = await searchWeb('tra google lại xem ngày 24.11 là ngày gì');
-    assert.equal(requestedUrls.length, 2);
-    assert.match(requestedUrls[0], /^https:\/\/serpapi\.com\//);
-    assert.equal(new URL(requestedUrls[0]).searchParams.get('q'), 'ngày 24.11 là ngày gì');
-    assert.match(requestedUrls[1], /^https:\/\/html\.duckduckgo\.com\//);
-    assert.equal(results[0].title, 'Tin cập nhật');
-    assert.equal(results[0].snippet, 'Thông tin mới nhất hôm nay.');
-  } finally {
-    global.fetch = originalFetch;
-    if (originalApiKey === undefined) {
-      delete process.env.SERPAPI_API_KEY;
-    } else {
-      process.env.SERPAPI_API_KEY = originalApiKey;
-    }
-  }
+  const report = await search.searchWebDetailed('hội nghị APEC 2026 ở đâu');
+  assert.deepEqual(engines, ['google', 'google_news']);
+  assert.equal(report.provider, 'Google News');
+  assert.equal(report.results[0].source, 'APEC');
 });
 
-test('search context prevents fabricated results when no sources were found', () => {
-  const context = buildSearchContext([]);
-  assert.match(context, /KHÔNG CÓ KẾT QUẢ/);
-  assert.match(context, /Không được tự suy đoán tỷ số/);
+test('blocked fallback and provider outages are distinguished from genuine empty results', async () => {
+  process.env.SERPAPI_API_KEY = 'test';
+  global.fetch = async url => String(url).startsWith('https://serpapi.com/')
+    ? json({ error: 'Searches per month limit reached' })
+    : { ok: true, text: async () => '<form class="challenge-form">Bots use DuckDuckGo</form>' };
+  const report = await search.searchWebDetailed('APEC ở đâu');
+  assert.equal(report.status, 'unavailable');
+  assert.equal(report.attempts.at(-1).status, 'blocked');
+  assert.match(search.formatSearchFailure(report), /dịch vụ tra cứu.*gặp lỗi/i);
+  global.fetch = async () => ({ ok: true, text: async () => '<p>No results</p>' });
+  delete process.env.SERPAPI_API_KEY;
+  assert.equal((await search.searchWebDetailed('APEC ở đâu')).status, 'empty');
 });
 
-test('search context requires actual match scores instead of generic commentary', () => {
-  const context = buildSearchContext([
-    { title: 'UEFA Nations League', snippet: 'Đội A 2-1 Đội B' }
-  ]);
-  assert.match(context, /nêu tên từng trận và tỷ số/);
-  assert.match(context, /Đội A 2-1 Đội B/);
+test('Gemini native search fallback requires actual grounding sources and supporting text', async () => {
+  process.env.GEMINI_API_KEY = 'test-gemini';
+  const requests = [];
+  global.fetch = async (url, options) => {
+    requests.push({ url: String(url), options });
+    return json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: 'APEC 2026 tổ chức tại Thâm Quyến.' }] }, groundingMetadata: {
+      groundingChunks: [{ web: { title: 'APEC', uri: 'https://apec.org/2026' } }],
+      groundingSupports: [{ segment: { text: 'APEC 2026 tổ chức tại Thâm Quyến.' }, groundingChunkIndices: [0] }]
+    } }] });
+  };
+  const report = await search.searchWebDetailed('hội nghị APEC 2026 diễn ra ở đâu');
+  assert.equal(report.provider, 'Gemini Google Search');
+  assert.match(report.answer, /Thâm Quyến/);
+  assert.deepEqual(JSON.parse(requests[0].options.body).tools, [{ googleSearch: {} }]);
+  assert.equal(requests[0].options.headers['x-goog-api-key'], 'test-gemini');
+  assert.doesNotMatch(requests[0].url, /test-gemini/);
+  assert.equal(report.results[0].url, 'https://apec.org/2026');
 });
 
-test('formats search-action results without exposing an action marker', () => {
-  const answer = formatSearchResults([
-    { title: 'UEFA Nations League', snippet: 'Đội A 2-1 Đội B' }
-  ]);
-  assert.match(answer, /UEFA Nations League/);
-  assert.match(answer, /Đội A 2-1 Đội B/);
-  assert.doesNotMatch(answer, /ACTION:SEARCH_WEB/);
+test('ungrounded native model output is discarded and another provider is tried', async () => {
+  process.env.GEMINI_API_KEY = 'test';
+  global.fetch = async url => String(url).includes('generativelanguage.googleapis.com')
+    ? json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: 'Bịa một câu trả lời.' }] } }] })
+    : { ok: true, text: async () => ddg };
+  const report = await search.searchWebDetailed('APEC ở đâu');
+  assert.equal(report.provider, 'DuckDuckGo');
+  assert.equal(report.answer, '');
 });
 
-test('explicit search with no sources reports that it found nothing instead of inventing an answer', () => {
-  const answer = formatSearchResults([]);
-  assert.match(answer, /chưa tìm được nguồn tin đáng tin cậy/);
-  assert.doesNotMatch(answer, /đã tra cứu kỹ/i);
+test('context is bounded evidence data, not fixed event claims or executable instructions', () => {
+  const context = search.buildSearchContext([{ title: 'APEC 2026', snippet: 'Hội nghị tại Thâm Quyến.', url: 'https://apec.org/2026', publishedAt: '2026-11-19' }]);
+  assert.match(context, /search_evidence/); assert.match(context, /Thâm Quyến/);
+  assert.match(context, /https:\/\/apec.org\/2026/);
+  assert.doesNotMatch(context, /CHÂN LÝ DUY NHẤT|Harry Kane|chưa diễn ra/);
+  assert.match(search.buildSearchContext([]), /KHÔNG CÓ KẾT QUẢ/);
+  assert.match(search.formatSearchResults([]), /chưa tìm được nguồn tin đáng tin cậy/);
+  assert.match(search.appendSources('APEC tại Thâm Quyến.', [{ url: 'https://apec.org/2026' }]), /Nguồn:\nhttps:\/\/apec.org\/2026/);
 });

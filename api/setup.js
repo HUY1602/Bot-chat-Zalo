@@ -9,8 +9,16 @@ const geminiService = require('../lib/gemini-service');
 const memoryService = require('../lib/memory-service');
 const avatarService = require('../lib/avatar-service');
 const reminderService = require('../lib/reminder-service');
+const searchService = require('../lib/search-service');
+
+const { requireAdmin } = require('../lib/auth');
 
 module.exports = async function handler(req, res) {
+  if (!requireAdmin(req, res)) return;
+  if (req.method === 'GET' && req.query?.login === '1') {
+    res.setHeader('Location', '/');
+    return res.status(303).end();
+  }
   if (req.method === 'GET') {
     const memStatus = memoryService.getMemoryStatus();
     const avatarDetails = await avatarService.getAvatarSourceDetails(req);
@@ -30,7 +38,7 @@ module.exports = async function handler(req, res) {
         hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
         hasFreeModelKey,
         hasSerpApiKey,
-        searchProvider: hasSerpApiKey ? 'SerpAPI (Google), DuckDuckGo dự phòng' : 'DuckDuckGo (chưa cấu hình SerpAPI)',
+        searchProvider: [hasSerpApiKey ? 'Google (SerpAPI)' : null, process.env.GEMINI_API_KEY && process.env.GEMINI_SEARCH_ENABLED !== 'false' ? 'Gemini Google Search' : null, 'DuckDuckGo'].filter(Boolean).join(' → '),
         freeModel,
         hasWebhookSecret: Boolean(process.env.WEBHOOK_SECRET),
         hasUpstashRedis: memStatus.isUpstash,
@@ -67,7 +75,17 @@ module.exports = async function handler(req, res) {
         if (!webhookUrl) {
           return res.status(400).json({ ok: false, error: 'Thiếu tham số webhookUrl' });
         }
-        const effectiveSecret = secretToken || process.env.WEBHOOK_SECRET || '16022004';
+        const effectiveSecret = process.env.WEBHOOK_SECRET;
+        if (!effectiveSecret || (secretToken && secretToken !== effectiveSecret)) {
+          return res.status(400).json({ ok: false, error: 'Cấu hình WEBHOOK_SECRET trên máy chủ; nếu nhập secret, giá trị phải trùng cấu hình.' });
+        }
+        let target;
+        try { target = new URL(webhookUrl); } catch {
+          return res.status(400).json({ ok: false, error: 'Webhook URL không hợp lệ.' });
+        }
+        if (target.protocol !== 'https:' || target.username || target.password) {
+          return res.status(400).json({ ok: false, error: 'Webhook phải dùng HTTPS và không chứa thông tin đăng nhập.' });
+        }
         const result = await botService.setWebhook(webhookUrl, effectiveSecret, token);
         return res.status(200).json({ ok: true, data: result });
       }
@@ -103,6 +121,13 @@ module.exports = async function handler(req, res) {
         const prompt = testPrompt || 'Xin chào! Hãy giới thiệu bạn là ai trong 2 câu ngắn gọn.';
         const answer = await geminiService.generateAnswer(prompt, { apiKey: geminiKey });
         return res.status(200).json({ ok: true, prompt, answer });
+      }
+
+      case 'test_search': {
+        const query = typeof testPrompt === 'string' && testPrompt.trim()
+          ? testPrompt.trim().slice(0, 600) : 'hội nghị thượng đỉnh APEC 2026 diễn ra ở đâu';
+        const search = await searchService.searchWebDetailed(query);
+        return res.status(200).json({ ok: search.status === 'ok', search });
       }
 
       default:

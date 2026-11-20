@@ -88,6 +88,79 @@ function freeModelResponse(content, finishReason = 'stop') {
   };
 }
 
+test('conversation style rules reach all providers without deleting meaningful dates', async t => {
+  await t.test('ordinary questions have no current timestamp and do not inherit historical signoffs as instructions', async () => {
+    const history = [
+      { role: 'user', parts: [{ text: '[Huy]: chào em' }] },
+      { role: 'model', parts: [{ text: 'Dạ em chào anh. Hôm nay là thứ 6 ngày 20/11, anh cần gì cứ báo em nhá.' }] }
+    ];
+    const savedHistory = structuredClone(history);
+    const prompt = '[Mai]: 1 kg bằng bao nhiêu gam?';
+    await withGeminiResponses([geminiResponse(['1 kg bằng 1.000 gam ạ.'])], async requests => {
+      assert.equal(await generateAnswer(prompt, { apiKey: 'test', model: 'test', history }), '1 kg bằng 1.000 gam ạ.');
+      const body = requests[0].body;
+      const instruction = body.systemInstruction.parts[0].text;
+      assert.match(instruction, /Không tự thêm ngày, tháng, thứ hoặc giờ hiện tại/);
+      assert.match(instruction, /Không bắt chước câu kết/);
+      assert.doesNotMatch(instruction, /NGỮ CẢNH THỜI GIAN NỘI BỘ:/);
+      assert.equal(body.contents.at(-1).parts[0].text, prompt);
+      assert.deepEqual(history, savedHistory);
+    });
+  });
+
+  await t.test('FreeModel custom environment persona still receives shared style rules', async () => {
+    const previousInstruction = process.env.SYSTEM_INSTRUCTION;
+    process.env.SYSTEM_INSTRUCTION = 'Bạn là trợ lý của nhóm dự án.';
+    try {
+      await withFreeModelResponses([freeModelResponse('Em nghe đây ạ.')], async requests => {
+        await generateAnswer('[Huy]: chào em');
+        const instruction = requests[0].body.messages[0].content;
+        assert.ok(instruction.startsWith(process.env.SYSTEM_INSTRUCTION));
+        assert.match(instruction, /Không tự thêm lời mời hỗ trợ/);
+        assert.doesNotMatch(instruction, /NGỮ CẢNH THỜI GIAN NỘI BỘ:/);
+      });
+    } finally {
+      if (previousInstruction === undefined) delete process.env.SYSTEM_INSTRUCTION;
+      else process.env.SYSTEM_INSTRUCTION = previousInstruction;
+    }
+  });
+
+  await t.test('date questions and relative follow-ups still receive Vietnam time context', async () => {
+    for (const prompt of ['[Huy]: Hôm nay ngày mấy?', '[Huy]: Thế ngày mai là thứ mấy?']) {
+      await withGeminiResponses([geminiResponse(['Hôm nay là thứ Sáu, ngày 20/11/2026.'])], async requests => {
+        const answer = await generateAnswer(prompt, { apiKey: 'test', model: 'test' });
+        assert.match(answer, /20\/11\/2026/);
+        assert.match(requests[0].body.systemInstruction.parts[0].text, /NGỮ CẢNH THỜI GIAN NỘI BỘ:.*GMT\+7/);
+        assert.equal(requests[0].body.contents.at(-1).parts[0].text, prompt);
+      });
+    }
+  });
+
+  await t.test('requested quotations and factual dates are preserved verbatim', async () => {
+    for (const [prompt, content] of [
+      ['Viết nguyên văn: Hôm nay là thứ 6 ngày 20/11, anh cần gì cứ báo em nhá.', 'Hôm nay là thứ 6 ngày 20/11, anh cần gì cứ báo em nhá.'],
+      ['Tóm tắt thời gian diễn ra sự kiện trong tài liệu.', 'Sự kiện diễn ra ngày 20/11/2026, lúc 08:00.']
+    ]) {
+      await withGeminiResponses([geminiResponse([content])], async requests => {
+        assert.equal(await generateAnswer(prompt, { apiKey: 'test', model: 'test', systemInstruction: 'Giữ nguyên các dữ kiện và nội dung trích dẫn.' }), content);
+        assert.match(requests[0].body.systemInstruction.parts[0].text, /không được sửa hoặc bỏ nội dung người dùng yêu cầu viết, dịch hay trích dẫn/);
+      });
+    }
+  });
+
+  await t.test('provider fallback keeps the same style instructions', async () => {
+    await withFreeModelResponses([
+      { ok: false, status: 429, body: { error: { message: 'rate limit' } } },
+      geminiResponse(['Dạ, 1 kg bằng 1.000 gam.'])
+    ], async requests => {
+      await generateAnswer('1 kg bằng bao nhiêu gam?', { model: 'test-fallback' });
+      assert.equal(requests.length, 2);
+      assert.equal(requests[0].body.messages[0].content, requests[1].body.systemInstruction.parts[0].text);
+      assert.match(requests[1].body.systemInstruction.parts[0].text, /dừng khi đã đủ ý/);
+    });
+  });
+});
+
 test('Gemini response handling', async t => {
   await t.test('combines all text parts instead of dropping later parts', async () => {
     await withGeminiResponses([
@@ -111,33 +184,33 @@ test('Gemini response handling', async t => {
       });
     });
 
-    await t.test('executes SEARCH_WEB and returns found sources', async () => {
-      const originalSearchWeb = searchService.searchWeb;
+    await t.test('searches current questions before generation and synthesizes with source links', async () => {
+      const originalSearchWeb = searchService.searchWebDetailed;
       let searchedQuery = '';
-      searchService.searchWeb = async query => {
+      searchService.searchWebDetailed = async query => {
         searchedQuery = query;
-        return [{ title: 'UEFA Nations League', snippet: 'Đội A 2-1 Đội B' }];
+        return { status: 'ok', provider: 'Google', query, attempts: [], durationMs: 1, results: [{ title: 'UEFA Nations League', snippet: 'Đội A 2-1 Đội B', url: 'https://example.test/match' }] };
       };
 
       try {
         await withFreeModelResponses([
-          freeModelResponse('Dạ để em kiểm tra [[ACTION:SEARCH_WEB: UEFA Nations League kết quả hôm qua]]')
+          freeModelResponse('Đội A 2-1 Đội B.')
         ], async requests => {
           const { action } = await generateAnswerWithAction('Cập nhật kết quả Nation League', {});
           assert.equal(action.type, 'CHAT');
           assert.match(action.text, /Đội A 2-1 Đội B/);
           assert.doesNotMatch(action.text, /ACTION:SEARCH_WEB/);
-          assert.equal(searchedQuery, 'UEFA Nations League kết quả hôm qua');
+          assert.equal(searchedQuery, 'Cập nhật kết quả Nation League');
           assert.equal(requests.length, 1);
         });
       } finally {
-        searchService.searchWeb = originalSearchWeb;
+        searchService.searchWebDetailed = originalSearchWeb;
       }
     });
 
     await t.test('does not fabricate results when SEARCH_WEB finds no sources', async () => {
-      const originalSearchWeb = searchService.searchWeb;
-      searchService.searchWeb = async () => [];
+      const originalSearchWeb = searchService.searchWebDetailed;
+      searchService.searchWebDetailed = async () => ({ status: 'empty', provider: '', results: [], attempts: [], durationMs: 1 });
 
       try {
         await withFreeModelResponses([
@@ -147,7 +220,7 @@ test('Gemini response handling', async t => {
           assert.match(action.text, /chưa tìm được nguồn tin đáng tin cậy/);
         });
       } finally {
-        searchService.searchWeb = originalSearchWeb;
+        searchService.searchWebDetailed = originalSearchWeb;
       }
     });
   });
@@ -243,4 +316,84 @@ test('Gemini response handling', async t => {
       }
     );
   });
+});
+
+test('grounded replies handle the reported APEC question, failures and model-requested search', async t => {
+  const originalSearch = searchService.searchWebDetailed;
+  const report = {
+    status: 'ok', provider: 'Google', query: 'APEC 2026', attempts: [{ provider: 'Google', status: 'ok' }], durationMs: 1,
+    results: [{ title: 'APEC 2026 tại Thâm Quyến', snippet: 'Hội nghị tại Thâm Quyến, Trung Quốc, ngày 18–19/11/2026.',
+      url: 'https://apec.org/2026', publishedAt: '2026-11-19' }]
+  };
+  try {
+    await t.test('answers APEC directly without leaking internal headers or fixed historical claims', async () => {
+      searchService.searchWebDetailed = async () => report;
+      await withFreeModelResponses([freeModelResponse('DỮ LIỆU THỰC TẾ TRA CỨU TỪ GOOGLE:\nNội dung: Địa điểm tổ chức APEC 2026 là Thâm Quyến, Trung Quốc.')], async requests => {
+        const result = await generateAnswerWithAction('[Huy]: hội nghị thượng đỉnh APEC 2026 diễn ra ở đâu', { searchQuery: 'hội nghị thượng đỉnh APEC 2026 diễn ra ở đâu', senderName: 'Huy' });
+        assert.match(result.action.text, /Thâm Quyến, Trung Quốc/);
+        assert.match(result.action.text, /https:\/\/apec.org\/2026/);
+        assert.doesNotMatch(result.action.text, /DỮ LIỆU THỰC TẾ|Nội dung:/);
+        assert.equal(result.search.provider, 'Google');
+        assert.equal(requests.length, 1);
+        const instruction = requests[0].body.messages[0].content;
+        assert.match(instruction, /Hỏi địa điểm|Nếu hỏi địa điểm/);
+        assert.match(instruction, /Không tự suy ra đã diễn ra/);
+        assert.doesNotMatch(instruction, /Harry Kane|Quả bóng vàng Việt Nam năm 2026/);
+      });
+    });
+    await t.test('empty and unavailable searches return concise distinct messages without asking AI to guess', async () => {
+      for (const status of ['empty', 'unavailable']) {
+        searchService.searchWebDetailed = async () => ({ ...report, status, results: [] });
+        await withFreeModelResponses([], async requests => {
+          const result = await generateAnswerWithAction('APEC 2026 diễn ra ở đâu');
+          assert.equal(requests.length, 0);
+          assert.equal(result.search.status, status);
+          assert.match(result.action.text, status === 'empty' ? /chưa tìm được nguồn/ : /dịch vụ tra cứu.*gặp lỗi/i);
+        });
+      }
+    });
+    await t.test('model can request a bounded search for a question missed by keyword routing', async () => {
+      const searched = [];
+      searchService.searchWebDetailed = async query => { searched.push(query); return report; };
+      await withFreeModelResponses([
+        freeModelResponse('[[ACTION:SEARCH_WEB: APEC 2026 địa điểm]]'),
+        freeModelResponse('Địa điểm tổ chức là Thâm Quyến, Trung Quốc.')
+      ], async requests => {
+        const result = await generateAnswerWithAction('Kể thêm về diễn đàn đó.');
+        assert.deepEqual(searched, ['APEC 2026 địa điểm']);
+        assert.equal(requests.length, 2);
+        assert.equal(result.action.type, 'CHAT');
+        assert.doesNotMatch(result.action.text, /ACTION:/);
+      });
+    });
+    await t.test('already-grounded native answer does not spend another AI request', async () => {
+      searchService.searchWebDetailed = async () => ({ ...report, provider: 'Gemini Google Search', answer: 'APEC 2026 tổ chức tại Thâm Quyến.' });
+      await withFreeModelResponses([], async requests => {
+        const result = await generateAnswerWithAction('APEC 2026 diễn ra ở đâu');
+        assert.equal(requests.length, 0);
+        assert.match(result.action.text, /Thâm Quyến/);
+        assert.match(result.action.text, /Nguồn:/);
+      });
+    });
+    await t.test('a question about new models is searched rather than mistaken for bot identity', async () => {
+      let searched = false;
+      searchService.searchWebDetailed = async () => { searched = true; return { ...report, results: [], status: 'empty' }; };
+      await withFreeModelResponses([], async requests => {
+        const result = await generateAnswerWithAction('Em ơi model Gemini mới nhất là gì?');
+        assert.equal(searched, true);
+        assert.equal(requests.length, 0);
+        assert.match(result.action.text, /chưa tìm được nguồn/);
+      });
+    });
+    await t.test('if AI synthesis fails, actual snippets and links are still returned', async () => {
+      searchService.searchWebDetailed = async () => report;
+      await withFreeModelResponses(() => ({ ok: false, status: 500, body: { error: { code: 500, message: 'offline' } } }), async () => {
+        const result = await generateAnswerWithAction('APEC 2026 diễn ra ở đâu');
+        assert.match(result.action.text, /Thâm Quyến/);
+        assert.match(result.action.text, /https:\/\/apec.org\/2026/);
+        assert.equal(result.search.status, 'ok');
+        assert.doesNotMatch(result.action.text, /ACTION:|DỮ LIỆU THỰC TẾ/);
+      });
+    });
+  } finally { searchService.searchWebDetailed = originalSearch; }
 });

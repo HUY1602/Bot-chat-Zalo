@@ -5,6 +5,7 @@
  */
 
 const memoryService = require('../lib/memory-service');
+const { escapeHtml } = require('../lib/html');
 
 function formatTtl(seconds) {
   if (!seconds || seconds <= 0) return 'Hết hạn';
@@ -17,7 +18,10 @@ function formatTtl(seconds) {
   return `${Math.round(seconds / 60)} phút`;
 }
 
+const { requireAdmin } = require('../lib/auth');
+
 module.exports = async function handler(req, res) {
+  if (!requireAdmin(req, res)) return;
   // Allow clearing memory via POST or DELETE: /api/memory?chatId=xxx
   if (req.method === 'POST' || req.method === 'DELETE') {
     const chatId = req.query?.chatId || req.body?.chatId;
@@ -27,6 +31,8 @@ module.exports = async function handler(req, res) {
     await memoryService.clearHistory(chatId);
     return res.status(200).json({ ok: true, message: `Đã xóa bộ nhớ của chat ${chatId}` });
   }
+
+  if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
 
   // GET: Return all active chat memories
   try {
@@ -162,7 +168,7 @@ module.exports = async function handler(req, res) {
       <div>
         <h1>🫧 Bộ Nhớ Hội Thoại Bot Zalo</h1>
         <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
-          Nơi lưu trữ: <span class="badge">${status.provider}</span> • Giữ tối đa <strong>50 tin nhắn</strong> • Thời gian lưu <strong>7 ngày</strong>
+          Nơi lưu trữ: <span class="badge">${status.provider}</span> • Giữ tối đa <strong>${status.maxHistoryMessages} tin nhắn</strong> • Thời gian lưu <strong>${formatTtl(status.ttlSeconds)}</strong>
         </div>
       </div>
       <div>
@@ -179,17 +185,17 @@ module.exports = async function handler(req, res) {
       <div class="chat-card">
         <div class="card-top">
           <div>
-            Chat ID: <span class="chat-id">${c.chatId}</span>
+            Chat ID: <span class="chat-id">${escapeHtml(c.chatId)}</span>
           </div>
           <div class="ttl">
-            ${c.messageCount} / 50 tin nhắn • Hết hạn sau ${formatTtl(c.ttlSeconds)}
+            ${c.messageCount} / ${status.maxHistoryMessages} tin nhắn • Hết hạn sau ${formatTtl(c.ttlSeconds)}
           </div>
         </div>
         <div class="msg-list">
           ${c.messages.map(m => `
             <div class="msg-item ${m.role === 'user' ? 'msg-user' : 'msg-model'}">
               <div class="msg-role">${m.role === 'user' ? '👤 Người Dùng' : '🫧 Bọt Biển Cute'}</div>
-              <div>${(m.parts?.[0]?.text || '').replace(/\n/g, '<br>')}</div>
+              <div>${escapeHtml(m.parts?.[0]?.text || '').replace(/\n/g, '<br>')}</div>
             </div>
           `).join('')}
         </div>

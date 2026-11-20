@@ -8,23 +8,13 @@ const geminiService = require('../lib/gemini-service');
 const memoryService = require('../lib/memory-service');
 const avatarService = require('../lib/avatar-service');
 const imageService = require('../lib/image-service');
-const searchService = require('../lib/search-service');
 const reminderService = require('../lib/reminder-service');
+const { parseReminderEditCommand } = require('../lib/reminder-commands');
 const dailyDigestService = require('../lib/daily-digest-service');
 const weatherService = require('../lib/weather-service');
 
-// Cache to prevent duplicate processing from webhook retries
-const processedMessageIds = new Map();
-const CACHE_TTL_MS = 60 * 1000; // 60 seconds
-
-function cleanupCache() {
-  const now = Date.now();
-  for (const [id, timestamp] of processedMessageIds.entries()) {
-    if (now - timestamp > CACHE_TTL_MS) {
-      processedMessageIds.delete(id);
-    }
-  }
-}
+const { requireWebhook } = require('../lib/auth');
+const stateStore = require('../lib/state-store');
 
 /**
  * Clean up @mentions or bot name prefix from message text
@@ -225,27 +215,10 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // Opportunistic trigger: Quét kiểm tra xem có nhắc việc hoặc điểm tin sáng nào đến hạn không
-  reminderService.checkAndTriggerReminders().catch(err => {
-    console.warn('[Webhook Opportunistic Trigger Error]:', err.message);
-  });
-  dailyDigestService.checkAndTriggerMorningDigest().catch(err => {
-    console.warn('[Webhook Opportunistic Digest Error]:', err.message);
-  });
-
-  // Verify secret token if configured
-  const secretToken = process.env.WEBHOOK_SECRET;
-  if (secretToken && secretToken.trim() !== '') {
-    const incomingSecret = req.headers['x-bot-api-secret-token'];
-    if (incomingSecret && incomingSecret !== secretToken && incomingSecret !== '16022004') {
-      console.warn('Secret token không khớp:', incomingSecret);
-      return res.status(401).json({ error: 'Unauthorized secret token' });
-    }
-  }
+  if (!requireWebhook(req, res)) return;
 
   const payload = req.body || {};
-  console.log('Incoming Zalo Webhook Event:', JSON.stringify(payload, null, 2));
-  memoryService.saveDebugWebhook(payload).catch(() => {});
+  if (process.env.DEBUG_WEBHOOK === 'true') await memoryService.saveDebugWebhook(payload);
 
   // Extract event data (support standard Zalo Bot Platform & nested result & legacy OA)
   const event = payload.result || payload;
@@ -259,12 +232,10 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ ok: true, note: 'Event acknowledged' });
   }
 
-  // Tự động ghi nhận chatId vào danh sách nhận điểm tin sáng nếu chưa có
-  dailyDigestService.registerChatForDigest(chatId).catch(() => {});
-
   // Extract fields
   const msgId = message.msg_id || message.message_id || event.msg_id || payload.msg_id;
   const rawText = message.text || message.caption || '';
+  if (typeof rawText !== 'string') return res.status(400).json({ ok: false, error: 'Invalid message text' });
   const chat = message.chat || {};
   const chatId = chat.id || event.sender?.id || payload.chat_id;
   const chatType = String(chat.type || chat.chat_type || 'group').toLowerCase();
@@ -279,14 +250,17 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ ok: false, error: 'Missing chat_id' });
   }
 
-  // Prevent duplicate execution for retried webhooks
-  cleanupCache();
-  if (msgId) {
-    if (processedMessageIds.has(msgId)) {
-      console.log(`Bỏ qua tin nhắn trùng lặp msg_id: ${msgId}`);
-      return res.status(200).json({ ok: true, duplicate: true });
+  const deliveryKey = msgId ? `zalo:delivery:${chatId}:${msgId}` : null;
+  let deliveryToken;
+  try {
+    if (deliveryKey) {
+      deliveryToken = await stateStore.claim(deliveryKey, 86400);
+      if (!deliveryToken) return res.status(200).json({ ok: true, duplicate: true });
     }
-    processedMessageIds.set(msgId, Date.now());
+    await dailyDigestService.registerChatForDigest(chatId);
+  } catch (error) {
+    if (deliveryToken) await stateStore.release(deliveryKey, deliveryToken).catch(() => {});
+    return res.status(503).json({ ok: false, error: 'Không thể lưu trạng thái nhận tin; vui lòng thử lại.' });
   }
 
   // Quản lý hiển thị trạng thái "đang soạn tin..." (Typing indicator) trên Zalo
@@ -311,27 +285,27 @@ module.exports = async function handler(req, res) {
   };
 
   // Kích hoạt ngay lập tức để người dùng thấy bot đang soạn tin
-  startTyping();
-
-  // Extract image and quoted message context (Vision & Contextual Reply)
-  const { imageUrl, quoteText } = extractImageAndQuote(payload, event, message);
-  let imageBuffer = null;
-  if (imageUrl) {
-    console.log(`[Vision] Phát hiện hình ảnh đính kèm: ${imageUrl}`);
-    imageBuffer = await geminiService.fetchImageAsBase64(imageUrl);
-    if (imageBuffer) {
-      console.log(`[Vision] Nạp ảnh thành công (MIME: ${imageBuffer.mimeType}, Base64: ${imageBuffer.data.length} chars)`);
-    }
-  }
-
-  // Process text message
   let userQuery = cleanMention(rawText);
-  if (!userQuery && imageBuffer) {
-    userQuery = 'Hãy quan sát kỹ bức ảnh này và mô tả, phân tích hoặc nhận xét chi tiết giúp anh nhé!';
-  }
-  console.log(`[Chat ${chatId} (${chatType})] Từ ${senderName}: "${rawText}" -> Câu hỏi: "${userQuery}"${imageUrl ? ' [KÈM ẢNH]' : ''}`);
-
   try {
+    startTyping();
+
+    // Extract image and quoted message context (Vision & Contextual Reply)
+    const { imageUrl, quoteText } = extractImageAndQuote(payload, event, message);
+    let imageBuffer = null;
+    if (imageUrl) {
+      console.log(`[Vision] Phát hiện hình ảnh đính kèm: ${imageUrl}`);
+      imageBuffer = await geminiService.fetchImageAsBase64(imageUrl);
+      if (imageBuffer) {
+        console.log(`[Vision] Nạp ảnh thành công (MIME: ${imageBuffer.mimeType}, Base64: ${imageBuffer.data.length} chars)`);
+      }
+    }
+
+    // Process text message
+    if (!userQuery && imageBuffer) {
+      userQuery = 'Hãy quan sát kỹ bức ảnh này và mô tả, phân tích hoặc nhận xét chi tiết giúp anh nhé!';
+    }
+    console.log(`[Chat ${chatId} (${chatType})] Từ ${senderName}: "${rawText}" -> Câu hỏi: "${userQuery}"${imageUrl ? ' [KÈM ẢNH]' : ''}`);
+
     // 0. Built-in command: /reset, /clear hoặc /forget (xóa bộ nhớ trò chuyện)
     if (userQuery === '/reset' || userQuery === '/clear' || userQuery === '/forget' || userQuery === '/quen') {
       await memoryService.clearHistory(chatId);
@@ -342,7 +316,7 @@ module.exports = async function handler(req, res) {
 
     // 1. Built-in command: /start hoặc /help
     if (userQuery === '/start' || userQuery === '/help' || userQuery === '!help') {
-      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh cần gì cứ hỏi em nha!\n\n📌 Các tính năng của em:\n• Hỏi đáp thông minh: Gõ @tên_bot kèm câu hỏi hoặc Reply tin nhắn của em\n• ☀️ Điểm tin sáng 7h30: Tự động gửi lời chúc, dự báo thời tiết & lịch nhắc mỗi sáng (gõ /morning để xem thử)\n• ⏰ Hẹn giờ & Nhắc việc: "nhắc anh 10 phút nữa uống nước", "nhắc em mai 8h sáng nộp báo cáo", /reminders, /huynhac\n• 📝 Tóm tắt hội thoại: "tóm tắt cuộc trò chuyện", "tóm tắt 20 tin nhắn gần nhất", /tomtat, /summary\n• 🎨 Vẽ tranh AI: Gõ "vẽ + mô tả" (ví dụ: vẽ chú mèo phi hành gia) hoặc "/draw ..."\n• 📸 Xem ảnh của em: Gõ "cho xem ảnh bot", "xem mặt bot"\n• /ping: Kiểm tra bot còn hoạt động không\n• /reset: Làm mới bộ nhớ trò chuyện\n• /help: Xem lại hướng dẫn này`;
+      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh cần gì cứ hỏi em nha!\n\n📌 Các tính năng của em:\n• Hỏi đáp thông minh: Gõ @tên_bot kèm câu hỏi hoặc Reply tin nhắn của em\n• ☀️ Điểm tin sáng 7h30: Tự động gửi lời chúc, dự báo thời tiết & lịch nhắc mỗi sáng (gõ /morning để xem thử)\n• ⏰ Hẹn giờ & Nhắc việc: "nhắc anh 10 phút nữa uống nước", "nhắc em mai 8h sáng nộp báo cáo", /reminders, /huynhac\n• 🔁 Nhắc lặp: /repeat daily 08:00 uống nước; /repeat weekly mon 08:00 họp\n• ⏳ Hoãn: /hoannhac ID 15m (kể từ bây giờ)\n• ✏️ Sửa: /suanhac ID gio 08:30; /suanhac ID noi-dung Việc mới\n• 📝 Tóm tắt hội thoại: "tóm tắt cuộc trò chuyện", "tóm tắt 20 tin nhắn gần nhất", /tomtat, /summary\n• 🎨 Vẽ tranh AI: Gõ "vẽ + mô tả" (ví dụ: vẽ chú mèo phi hành gia) hoặc "/draw ..."\n• 📸 Xem ảnh của em: Gõ "cho xem ảnh bot", "xem mặt bot"\n• /ping: Kiểm tra bot còn hoạt động không\n• /reset: Làm mới bộ nhớ trò chuyện\n• /help: Xem lại hướng dẫn này`;
       await botService.sendMessage(chatId, helpText, msgId);
       return res.status(200).json({ ok: true });
     }
@@ -363,6 +337,31 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // Edits must be routed before creation, without using AI to select a reminder.
+    const editCommand = parseReminderEditCommand(userQuery);
+    if (editCommand !== null) {
+      if (!editCommand.ok) {
+        await botService.sendMessage(chatId, editCommand.error, msgId);
+        return res.status(200).json({ ok: false, action: 'editReminderHelp' });
+      }
+      const result = await reminderService.updateReminder(chatId, editCommand.id, userId || null, editCommand.changes);
+      if (!result.ok) {
+        const errors = {
+          busy: 'Lịch này đang được xử lý. Hãy thử lại sau một lát.',
+          not_found: 'Không tìm thấy lịch của bạn trong nhóm này. Dùng /reminders để kiểm tra ID; bạn chỉ sửa được lịch do mình tạo.',
+          completed: 'Lịch đã gửi. Bạn có thể hoãn để nhận lại bằng /hoannhac ID 15m trong vòng 24 giờ.',
+          invalid: 'Thay đổi không hợp lệ. Dùng /hoannhac ID 15m hoặc /suanhac ID gio 08:30.'
+        };
+        await botService.sendMessage(chatId, errors[result.reason] || 'Chưa thể cập nhật lịch.', msgId);
+        return res.status(200).json({ ok: false, action: 'updateReminder', reason: result.reason });
+      }
+      const updated = result.reminder;
+      const statusNote = updated.status === 'failed' ? '\n⚠️ Lịch vẫn tạm dừng do gửi lỗi. Hãy sửa giờ hoặc hoãn để thử lại.' : '';
+      const recurringNote = updated.recurrence ? `\n🔁 ${reminderService.formatRecurrence(updated.recurrence)}. Thay đổi giờ/hoãn chỉ áp dụng cho lần nhắc kế tiếp.` : '';
+      await botService.sendMessage(chatId, `✅ Đã cập nhật lịch nhắc.\n📌 ${updated.task}\n🕒 ${reminderService.formatTimeVN(updated.scheduledTime)}\n🔑 ID: ${updated.id}${recurringNote}${statusNote}`, msgId);
+      return res.status(200).json({ ok: true, action: 'updateReminder', reminderId: updated.id });
+    }
+
     // 2.3 Xem danh sách nhắc việc: /reminders, /dsnhac hoặc "danh sách nhắc việc"
     if (reminderService.isListRemindersRequest(userQuery)) {
       const reminders = await reminderService.listReminders(chatId);
@@ -372,11 +371,11 @@ module.exports = async function handler(req, res) {
       } else {
         const listItems = reminders.map((r, i) => {
           const diffMs = r.scheduledTime - Date.now();
-          const relStr = reminderService.formatRelativeTime(diffMs);
-          return `${i + 1}. 📌 **${r.task}**\n   🕒 ${r.timeFormatted} (${relStr})\n   👤 Nhắc: ${r.targetName}\n   🔑 ID: ${r.id}`;
+          const relStr = r.status === 'failed' ? 'Gửi thất bại sau 5 lần; sửa giờ/hoãn để thử lại' : reminderService.formatRelativeTime(diffMs);
+          return `${i + 1}. 📌 **${r.task}**\n   🕒 ${reminderService.formatTimeVN(r.scheduledTime)} (${relStr})${r.recurrence ? `\n   🔁 ${reminderService.formatRecurrence(r.recurrence)}` : ''}\n   👤 Nhắc: ${r.targetName}\n   🔑 ID: ${r.id}`;
         }).join('\n\n');
 
-        const listText = `⏰ DANH SÁCH NHẮC VIỆC ĐANG CHỜ CỦA NHÓM NÈ:\n\n${listItems}\n\n💡 Để hủy nhắc việc, anh gõ: /huynhac [ID] hoặc /huynhac all (hủy tất cả)`;
+        const listText = `⏰ DANH SÁCH NHẮC VIỆC ĐANG CHỜ CỦA NHÓM NÈ:\n\n${listItems}\n\n💡 Để hủy nhắc việc, anh gõ: /huynhac [ID] hoặc /huynhac all (hủy các lịch của bạn). Hoãn: /hoannhac ID 15m; sửa nội dung: /suanhac ID noi-dung Nội dung mới`;
         await botService.sendMessage(chatId, listText, msgId);
       }
       return res.status(200).json({ ok: true, action: 'listReminders' });
@@ -386,9 +385,13 @@ module.exports = async function handler(req, res) {
     if (reminderService.isCancelReminderRequest(userQuery)) {
       const idMatch = userQuery.match(/\b(remind_[a-z0-9_]+)\b/i);
       const isAll = /\ball\b|tất\s*cả|toàn\s*bộ/i.test(userQuery);
-      const targetId = idMatch ? idMatch[1] : (isAll ? 'all' : 'all');
+      const targetId = idMatch ? idMatch[1] : (isAll ? 'all' : null);
+      if (!targetId) {
+        await botService.sendMessage(chatId, 'Hãy nhập /huynhac [ID] hoặc /huynhac all để hủy các nhắc việc của bạn.', msgId);
+        return res.status(200).json({ ok: true, action: 'cancelReminderHelp' });
+      }
 
-      const cancelRes = await reminderService.cancelReminder(chatId, targetId);
+      const cancelRes = await reminderService.cancelReminder(chatId, targetId, userId || null);
       const cancelText = cancelRes.count > 0
         ? `Dạ Bọt biển đã hủy thành công ${cancelRes.count} lịch nhắc cho nhóm mình rồi nè ${senderName} ơi! 🫧`
         : `Dạ em không tìm thấy lịch nhắc nào cần hủy trong nhóm mình nè ${senderName} ơi! 🥰`;
@@ -410,6 +413,7 @@ module.exports = async function handler(req, res) {
           targetName: parseResult.targetName,
           task: parseResult.task,
           scheduledTime: parseResult.scheduledTime,
+          recurrence: parseResult.recurrence || null,
           timeFormatted: parseResult.timeFormatted,
           msgId
         });
@@ -425,7 +429,7 @@ module.exports = async function handler(req, res) {
         );
 
         // Nếu hẹn trong thời gian rất ngắn (dưới 25 giây), chạy hẹn giờ trong tiến trình hiện tại nếu còn sống
-        if (parseResult.delayMs <= 25000) {
+        if (!process.env.VERCEL && parseResult.delayMs <= 25000) {
           setTimeout(async () => {
             try {
               await reminderService.checkAndTriggerReminders();
@@ -435,6 +439,10 @@ module.exports = async function handler(req, res) {
 
         return res.status(200).json({ ok: true, action: 'createReminder', reminderId: reminder.id });
       } else {
+        if (parseResult.error && reminderService.parseRecurringReminder(userQuery) !== null) {
+          await botService.sendMessage(chatId, parseResult.error, msgId);
+          return res.status(200).json({ ok: false, action: 'recurringReminderHelp' });
+        }
         const guideText = `Ui, ${senderName} ơi, em chưa hiểu rõ thời gian anh muốn hẹn nè 🥺\n\nanh có thể nhắn rõ hơn, ví dụ:\n• "nhắc anh 10 phút nữa uống nước"\n• "nhắc em mai 8h sáng nộp báo cáo"\n• "nhắc nhóm 15h30 chiều nay họp"\n• Hoặc dùng lệnh: /remind 15m đi ăn cơm`;
         await botService.sendMessage(chatId, guideText, msgId);
         return res.status(200).json({ ok: false, error: 'Could not parse reminder time' });
@@ -510,37 +518,15 @@ module.exports = async function handler(req, res) {
     // 4. Lấy lịch sử hội thoại gần nhất của chat này
     const history = await memoryService.getHistory(chatId);
 
-    // 4.5 Kiểm tra xem câu hỏi có cần tra cứu Internet thời gian thực không
-    let searchContext = '';
-    const explicitGoogleSearch = searchService.isGoogleSearchRequest(userQuery);
-    if (explicitGoogleSearch || searchService.shouldSearchWeb(userQuery)) {
-      console.log(`[WebSearch] Đang tìm kiếm thông tin thời gian thực cho: "${userQuery}"`);
-      const searchResults = await searchService.searchWeb(userQuery);
-      if (explicitGoogleSearch) {
-        const searchAnswer = searchService.formatSearchResults(searchResults);
-        await memoryService.addTurn(chatId, `[${senderName}]: ${userQuery}`, searchAnswer);
-        await botService.sendMessage(chatId, searchAnswer, msgId);
-        return res.status(200).json({ ok: true, action: 'explicitGoogleSearch', resultCount: searchResults.length });
-      }
-
-      if (searchResults && searchResults.length > 0) {
-        searchContext = searchService.buildSearchContext(searchResults);
-        console.log(`[WebSearch] Đã nạp ${searchResults.length} nguồn tin từ Internet.`);
-      } else {
-        searchContext = searchService.buildSearchContext([]);
-        console.warn('[WebSearch] Không tìm thấy nguồn phù hợp; yêu cầu AI không suy đoán.');
-      }
-    }
-
-    // Gắn tên người gửi rõ ràng kèm thông tin trích dẫn / hình ảnh để AI phân tích chuẩn xác
     const userPrompt = `[${senderName}]${imageBuffer ? ' (kèm hình ảnh)' : ''}: ${userQuery}`;
-    const fullUserContext = quoteText ? `${quoteText}\n${userPrompt}` : userPrompt;
-    const contextualQuery = `${fullUserContext}${searchContext}`;
+    const contextualQuery = quoteText ? `${quoteText}\n${userPrompt}` : userPrompt;
 
-    // 5. Gửi câu hỏi đến AI provider (kèm hình ảnh Vision nếu có)
+    // Search, synthesis and source handling are shared with the dashboard.
     const { action } = await geminiService.generateAnswerWithAction(contextualQuery, {
       history,
-      image: imageBuffer
+      image: imageBuffer,
+      searchQuery: userQuery,
+      senderName
     });
 
     // 6. Xử lý các hành động ngữ nghĩa do Gemini quyết định
@@ -589,7 +575,9 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({ ok: true });
   } catch (err) {
-    console.error('Lỗi khi xử lý tin nhắn:', err);
+    console.error('Lỗi khi xử lý tin nhắn:', err.message);
+    // Keep the accepted delivery marker: retrying the whole handler could repeat a side effect.
+
 
     // Fallback thông minh: Nếu Gemini lỗi nhưng người dùng đang hỏi ảnh đại diện theo regex thì vẫn phục vụ ảnh!
     if (avatarService.isBotPhotoRequest(userQuery)) {
@@ -604,7 +592,7 @@ module.exports = async function handler(req, res) {
 
     // Thông báo lỗi thân thiện cho người dùng nếu xảy ra sự cố
     try {
-      const errorMsg = `Ui, em bị lỗi rồi ${senderName} ơi 🥺 (${err.message}). Anh thử nhắn lại sau chút nha!`;
+      const errorMsg = `Ui, em bị lỗi rồi ${senderName} ơi 🥺. Anh thử nhắn lại sau chút nha!`;
       await botService.sendMessage(chatId, errorMsg, msgId);
     } catch (sendErr) {
       console.error('Không thể gửi tin nhắn báo lỗi:', sendErr);
