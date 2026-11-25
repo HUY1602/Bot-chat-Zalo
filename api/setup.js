@@ -47,7 +47,7 @@ module.exports = async function handler(req, res) {
           hasSerperKey ? 'Serper Google' : null,
           hasSerpApiKey ? 'Google (SerpAPI)' : null,
           process.env.GEMINI_API_KEY && process.env.GEMINI_SEARCH_ENABLED !== 'false' ? 'Gemini Google Search' : null,
-          'Bing News RSS + Google News RSS + DuckDuckGo'
+          'Bing News RSS + Google News RSS + Wikipedia + DuckDuckGo'
         ].filter(Boolean).join(' → '),
         freeModel,
         hasWebhookSecret: Boolean(process.env.WEBHOOK_SECRET),
