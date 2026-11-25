@@ -4,7 +4,7 @@ const search = require('../lib/search-service');
 let originalEnv, originalFetch;
 beforeEach(() => {
   originalEnv = { ...process.env }; originalFetch = global.fetch;
-  for (const name of ['SERPAPI_API_KEY', 'SERP_API_KEY', 'GEMINI_API_KEY']) delete process.env[name];
+  for (const name of ['TAVILY_API_KEY', 'SERPER_API_KEY', 'SERPAPI_API_KEY', 'SERP_API_KEY', 'GEMINI_API_KEY']) delete process.env[name];
   global.fetch = async () => { throw new Error('Unexpected network request'); };
 });
 afterEach(() => { process.env = originalEnv; global.fetch = originalFetch; });
@@ -46,7 +46,7 @@ test('quota errors fall back and preserve source URLs and decoded snippets', asy
     return String(url).startsWith('https://serpapi.com/') ? json({ error: 'Searches per month limit reached' }) : { ok: true, text: async () => ddg };
   };
   const report = await search.searchWebDetailed('tra google APEC mới nhất');
-  assert.equal(requests.length, 2);
+  assert.ok(requests.length >= 2);
   assert.equal(new URL(requests[0].url).searchParams.get('tbs'), 'qdr:w');
   assert.ok(requests.every(request => request.options.signal));
   assert.equal(report.results[0].snippet, 'Hội nghị APEC tổ chức tại Thâm Quyến & có thông tin mới.');
@@ -131,4 +131,48 @@ test('context is bounded evidence data, not fixed event claims or executable ins
   assert.match(search.buildSearchContext([]), /KHÔNG CÓ KẾT QUẢ/);
   assert.match(search.formatSearchResults([]), /chưa tìm được nguồn tin đáng tin cậy/);
   assert.match(search.appendSources('APEC tại Thâm Quyến.', [{ url: 'https://apec.org/2026' }]), /Nguồn:\nhttps:\/\/apec.org\/2026/);
+});
+
+test('Bing News RSS and Google News RSS deliver real-time results even when SerpAPI quota fails and DuckDuckGo is blocked', async () => {
+  process.env.SERPAPI_API_KEY = 'test';
+  const bingXml = `<rss><channel><item>
+    <title>U17 Việt Nam h&#242;a U17 New Zealand 3-3 tại U17 World Cup 2026</title>
+    <description>Lượt trận thứ 2 bảng G U17 World Cup 2026, U17 Việt Nam giành 1 điểm quý giá trước New Zealand.</description>
+    <link>http://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;url=https%3A%2F%2Fvov.vn%2Fu17-vn-nz-2026</link>
+    <pubDate>Mon, 23 Nov 2026 17:18:00 GMT</pubDate>
+  </item></channel></rss>`;
+  global.fetch = async url => {
+    const u = String(url);
+    if (u.startsWith('https://serpapi.com/')) return json({ error: 'Your account has run out of searches.' });
+    if (u.includes('html.duckduckgo.com')) return { ok: true, text: async () => '<form class="challenge-form">Bots use DuckDuckGo</form>' };
+    if (u.includes('bing.com/news/search')) return { ok: true, text: async () => bingXml };
+    return { ok: true, text: async () => '<rss><channel></channel></rss>' };
+  };
+  const report = await search.searchWebDetailed('cập nhật kết quả của u17 việt nam tại u17 world cup 2026');
+  assert.equal(report.status, 'ok');
+  assert.equal(report.provider, 'Bing News');
+  assert.equal(report.results[0].url, 'https://vov.vn/u17-vn-nz-2026');
+  assert.match(report.results[0].title, /hòa U17 New Zealand 3-3/);
+  assert.match(report.results[0].publishedAt, /24\/11\/2026/);
+});
+
+test('Tavily and Serper providers work when configured', async () => {
+  process.env.TAVILY_API_KEY = 'tvly-test';
+  global.fetch = async url => {
+    assert.equal(String(url), 'https://api.tavily.com/search');
+    return json({ results: [{ title: 'U17 World Cup 2026', content: 'U17 Việt Nam hòa New Zealand 3-3.', url: 'https://vnexpress.net/u17-2026', published_date: '2026-11-24' }] });
+  };
+  const tavilyReport = await search.searchWebDetailed('kết quả U17 Việt Nam 2026');
+  assert.equal(tavilyReport.provider, 'Tavily');
+  assert.equal(tavilyReport.results[0].url, 'https://vnexpress.net/u17-2026');
+
+  delete process.env.TAVILY_API_KEY;
+  process.env.SERPER_API_KEY = 'serper-test';
+  global.fetch = async url => {
+    assert.equal(String(url), 'https://google.serper.dev/search');
+    return json({ organic: [{ title: 'U17 Việt Nam 2026', snippet: 'U17 Việt Nam đấu U17 Mali lượt cuối.', link: 'https://tuoitre.vn/u17-mali-2026', date: '1 day ago' }] });
+  };
+  const serperReport = await search.searchWebDetailed('kết quả U17 Việt Nam 2026');
+  assert.equal(serperReport.provider, 'Serper Google');
+  assert.equal(serperReport.results[0].url, 'https://tuoitre.vn/u17-mali-2026');
 });

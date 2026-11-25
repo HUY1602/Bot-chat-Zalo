@@ -27,6 +27,8 @@ module.exports = async function handler(req, res) {
     const hasCustomAvatar = Boolean(process.env.BOT_AVATAR_URL || process.env.GOOGLE_DRIVE_FOLDER_ID || localFiles.length > 0);
     const hasFreeModelKey = Boolean(process.env.FREEMODEL_API_KEY);
     const hasSerpApiKey = Boolean((process.env.SERPAPI_API_KEY || process.env.SERP_API_KEY || '').trim());
+    const hasTavilyKey = Boolean((process.env.TAVILY_API_KEY || '').trim());
+    const hasSerperKey = Boolean((process.env.SERPER_API_KEY || '').trim());
     const freeModel = process.env.FREEMODEL_MODEL || 'gpt-6-luna';
     const geminiModel = process.env.GEMINI_MODEL || geminiService.DEFAULT_MODEL;
     const defaultWeatherCity = process.env.DEFAULT_WEATHER_CITY || 'hanoi';
@@ -38,7 +40,15 @@ module.exports = async function handler(req, res) {
         hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
         hasFreeModelKey,
         hasSerpApiKey,
-        searchProvider: [hasSerpApiKey ? 'Google (SerpAPI)' : null, process.env.GEMINI_API_KEY && process.env.GEMINI_SEARCH_ENABLED !== 'false' ? 'Gemini Google Search' : null, 'DuckDuckGo'].filter(Boolean).join(' → '),
+        hasTavilyKey,
+        hasSerperKey,
+        searchProvider: [
+          hasTavilyKey ? 'Tavily' : null,
+          hasSerperKey ? 'Serper Google' : null,
+          hasSerpApiKey ? 'Google (SerpAPI)' : null,
+          process.env.GEMINI_API_KEY && process.env.GEMINI_SEARCH_ENABLED !== 'false' ? 'Gemini Google Search' : null,
+          'Bing News RSS + Google News RSS + DuckDuckGo'
+        ].filter(Boolean).join(' → '),
         freeModel,
         hasWebhookSecret: Boolean(process.env.WEBHOOK_SECRET),
         hasUpstashRedis: memStatus.isUpstash,
