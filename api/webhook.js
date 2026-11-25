@@ -14,6 +14,13 @@ const dailyDigestService = require('../lib/daily-digest-service');
 const weatherService = require('../lib/weather-service');
 
 const { requireWebhook } = require('../lib/auth');
+
+function isZaloAdmin(userId) {
+  const raw = (process.env.ADMIN_ZALO_IDS || '').trim();
+  if (!raw) return true;
+  const allowed = raw.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+  return allowed.length === 0 || (Boolean(userId) && allowed.includes(String(userId)));
+}
 const stateStore = require('../lib/state-store');
 
 /**
@@ -308,21 +315,82 @@ module.exports = async function handler(req, res) {
 
     // 0. Built-in command: /reset, /clear hoặc /forget (xóa bộ nhớ trò chuyện)
     if (userQuery === '/reset' || userQuery === '/clear' || userQuery === '/forget' || userQuery === '/quen') {
+      if (!isZaloAdmin(userId)) {
+        await botService.sendMessage(chatId, `Dạ chỉ Admin nhóm mới có quyền làm mới bộ nhớ trò chuyện của cả nhóm nha ${senderName} ơi! 🫧`, msgId);
+        return res.status(200).json({ ok: false, error: 'Admin required' });
+      }
       await memoryService.clearHistory(chatId);
       const resetText = `Dạ em đã làm mới bộ nhớ của nhóm mình rồi nè anh ơi! Giờ tụi mình bắt đầu câu chuyện mới nghen 🫧✨`;
       await botService.sendMessage(chatId, resetText, msgId);
       return res.status(200).json({ ok: true });
     }
 
+    // 0.5 Built-in command: /id (Tra cứu nhanh Zalo Bot User ID & Chat ID)
+    if (/^\/(?:id|myid|userid)\b/i.test(userQuery)) {
+      const adminLabel = process.env.ADMIN_ZALO_IDS ? (isZaloAdmin(userId) ? ' (Admin)' : '') : '';
+      const idText = `🪪 Thông tin định danh Zalo Bot của ${senderName}:\n• User ID: ${userId || 'Không xác định'}${adminLabel}\n• Chat ID: ${chatId}`;
+      await botService.sendMessage(chatId, idText, msgId);
+      return res.status(200).json({ ok: true, action: 'getId' });
+    }
+
     // 1. Built-in command: /start hoặc /help
     if (userQuery === '/start' || userQuery === '/help' || userQuery === '!help') {
-      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh cần gì cứ hỏi em nha!\n\n📌 Các tính năng của em:\n• Hỏi đáp thông minh: Gõ @tên_bot kèm câu hỏi hoặc Reply tin nhắn của em\n• ☀️ Điểm tin sáng 7h30: Tự động gửi lời chúc, dự báo thời tiết & lịch nhắc mỗi sáng (gõ /morning để xem thử)\n• ⏰ Hẹn giờ & Nhắc việc: "nhắc anh 10 phút nữa uống nước", "nhắc em mai 8h sáng nộp báo cáo", /reminders, /huynhac\n• 🔁 Nhắc lặp: /repeat daily 08:00 uống nước; /repeat weekly mon 08:00 họp\n• ⏳ Hoãn: /hoannhac ID 15m (kể từ bây giờ)\n• ✏️ Sửa: /suanhac ID gio 08:30; /suanhac ID noi-dung Việc mới\n• 📝 Tóm tắt hội thoại: "tóm tắt cuộc trò chuyện", "tóm tắt 20 tin nhắn gần nhất", /tomtat, /summary\n• 🎨 Vẽ tranh AI: Gõ "vẽ + mô tả" (ví dụ: vẽ chú mèo phi hành gia) hoặc "/draw ..."\n• 📸 Xem ảnh của em: Gõ "cho xem ảnh bot", "xem mặt bot"\n• /ping: Kiểm tra bot còn hoạt động không\n• /reset: Làm mới bộ nhớ trò chuyện\n• /help: Xem lại hướng dẫn này`;
+      const helpText = `Chào ${senderName} nè! Em là Bọt biển cute 🫧✨\n\nEm là trợ lý AI trong nhóm Zalo này, anh cần gì cứ hỏi em nha!\n\n📌 Các tính năng của em:\n• Hỏi đáp thông minh: Gõ @tên_bot kèm câu hỏi hoặc Reply tin nhắn của em\n• ☀️ Điểm tin sáng 7h30: Tự động gửi lời chúc & thời tiết mỗi sáng (/morning, /diemtin on/off, /diemtin city Hà Nội)\n• 🌤️ Thời tiết: /thoitiet <tỉnh/thành phố> (ví dụ: /thoitiet Đà Nẵng)\n• ⏰ Hẹn giờ & Nhắc việc: "nhắc anh 10 phút nữa uống nước", /reminders, /huynhac\n• 🔁 Nhắc lặp: /repeat daily 08:00 uống nước; /repeat weekly mon 08:00 họp\n• ⏳ Hoãn: /hoannhac ID 15m | ✏️ Sửa: /suanhac ID gio 08:30\n• 📝 Tóm tắt hội thoại: /tomtat, /summary\n• 🎨 Vẽ tranh AI: "vẽ + mô tả" hoặc "/draw ..."\n• 📸 Xem ảnh của em: "cho xem ảnh bot", "xem mặt bot"\n• /id: Xem User ID & Chat ID | /ping: Kiểm tra bot | /reset: Xóa bộ nhớ`;
       await botService.sendMessage(chatId, helpText, msgId);
       return res.status(200).json({ ok: true });
     }
 
-    // 1.5 Built-in command: /morning hoặc /diemtin (Xem trước điểm tin & dự báo thời tiết)
-    if (/^\/(?:morning|diemtin|chao|thoitiet)\b/i.test(userQuery) || /^(?:điểm tin sáng|xem điểm tin|dự báo thời tiết hôm nay)$/i.test(userQuery)) {
+    // 1.5 Built-in command: /morning, /diemtin (bật/tắt/đổi thành phố/xem trước) & /thoitiet
+    const diemtinSubMatch = userQuery.match(/^\/(?:morning|diemtin)\s+(.+)$/i);
+    if (diemtinSubMatch) {
+      const arg = diemtinSubMatch[1].trim();
+      if (/^(?:on|bat|bật|mo|mở)$/i.test(arg)) {
+        await dailyDigestService.updateChatDigestSettings(chatId, { enabled: true });
+        await botService.sendMessage(chatId, `☀️ Dạ em đã BẬT điểm tin buổi sáng 7h30 cho nhóm mình rồi nè! 🫧`, msgId);
+        return res.status(200).json({ ok: true, action: 'digestEnable' });
+      }
+      if (/^(?:off|tat|tắt|dung|dừng)$/i.test(arg)) {
+        await dailyDigestService.updateChatDigestSettings(chatId, { enabled: false });
+        await botService.sendMessage(chatId, `🔕 Dạ em đã TẮT điểm tin buổi sáng 7h30 cho cuộc trò chuyện này rồi ạ. Khi nào cần bật lại anh gõ /diemtin on nha! 🫧`, msgId);
+        return res.status(200).json({ ok: true, action: 'digestDisable' });
+      }
+      const cityArg = arg.replace(/^(?:city|thanh\s*pho|thành\s*phố|set)\s+/i, '').trim();
+      const weather = await weatherService.resolveCityAndGetWeather(cityArg);
+      if (!weather) {
+        await botService.sendMessage(chatId, `Ui em chưa tìm thấy địa điểm "${cityArg}" rồi ${senderName} ơi 🥺 Anh thử nhập tên thành phố rõ hơn (ví dụ: /diemtin city Đà Nẵng) nha!`, msgId);
+        return res.status(200).json({ ok: false, action: 'digestCityNotFound' });
+      }
+      await dailyDigestService.updateChatDigestSettings(chatId, { city: cityArg, enabled: true });
+      await botService.sendMessage(chatId, `📍 Đã đặt thành phố dự báo thời tiết buổi sáng cho nhóm là ${weather.cityName} rồi nè ${senderName} ơi! 🫧`, msgId);
+      return res.status(200).json({ ok: true, action: 'digestSetCity', city: weather.cityName });
+    }
+
+    const weatherQueryMatch = userQuery.match(/^\/thoitiet(?:\s+(.+))?$/i);
+    if (weatherQueryMatch) {
+      const rawCity = (weatherQueryMatch[1] || '').trim();
+      if (/^set\s+/i.test(rawCity)) {
+        const setCity = rawCity.replace(/^set\s+/i, '').trim();
+        const weather = await weatherService.resolveCityAndGetWeather(setCity);
+        if (!weather) {
+          await botService.sendMessage(chatId, `Ui em chưa tìm thấy địa điểm "${setCity}" rồi ${senderName} ơi 🥺`, msgId);
+          return res.status(200).json({ ok: false, action: 'weatherSetNotFound' });
+        }
+        await dailyDigestService.updateChatDigestSettings(chatId, { city: setCity });
+        await botService.sendMessage(chatId, `📍 Đã cập nhật thành phố thời tiết mặc định cho nhóm là ${weather.cityName}!\n\n${dailyDigestService.formatWeatherSection(weather)}`, msgId);
+        return res.status(200).json({ ok: true, action: 'weatherSetCity' });
+      }
+      const settings = await dailyDigestService.getChatDigestSettings(chatId);
+      const targetCity = rawCity || settings.city || process.env.DEFAULT_WEATHER_CITY || 'hanoi';
+      const weather = await weatherService.resolveCityAndGetWeather(targetCity);
+      if (!weather) {
+        await botService.sendMessage(chatId, `Ui em chưa tìm thấy thời tiết của "${targetCity}" rồi ${senderName} ơi 🥺 Anh thử nhập tên thành phố rõ hơn nha!`, msgId);
+        return res.status(200).json({ ok: false, action: 'weatherNotFound' });
+      }
+      await botService.sendMessage(chatId, dailyDigestService.formatWeatherSection(weather), msgId);
+      return res.status(200).json({ ok: true, action: 'weatherCheck', city: weather.cityName });
+    }
+
+    if (/^\/(?:morning|diemtin|chao)\b/i.test(userQuery) || /^(?:điểm tin sáng|xem điểm tin|dự báo thời tiết hôm nay)$/i.test(userQuery)) {
       const dtParts = dailyDigestService.getVietnamDateTimeParts();
       const digestMsg = await dailyDigestService.composeMorningDigestMessage(chatId, dtParts);
       await botService.sendMessage(chatId, digestMsg, msgId);
@@ -372,7 +440,7 @@ module.exports = async function handler(req, res) {
         const listItems = reminders.map((r, i) => {
           const diffMs = r.scheduledTime - Date.now();
           const relStr = r.status === 'failed' ? 'Gửi thất bại sau 5 lần; sửa giờ/hoãn để thử lại' : reminderService.formatRelativeTime(diffMs);
-          return `${i + 1}. 📌 **${r.task}**\n   🕒 ${reminderService.formatTimeVN(r.scheduledTime)} (${relStr})${r.recurrence ? `\n   🔁 ${reminderService.formatRecurrence(r.recurrence)}` : ''}\n   👤 Nhắc: ${r.targetName}\n   🔑 ID: ${r.id}`;
+          return `${i + 1}. 📌 ${r.task}\n   🕒 ${reminderService.formatTimeVN(r.scheduledTime)} (${relStr})${r.recurrence ? `\n   🔁 ${reminderService.formatRecurrence(r.recurrence)}` : ''}\n   👤 Nhắc: ${r.targetName}\n   🔑 ID: ${r.id}`;
         }).join('\n\n');
 
         const listText = `⏰ DANH SÁCH NHẮC VIỆC ĐANG CHỜ CỦA NHÓM NÈ:\n\n${listItems}\n\n💡 Để hủy nhắc việc, anh gõ: /huynhac [ID] hoặc /huynhac all (hủy các lịch của bạn). Hoãn: /hoannhac ID 15m; sửa nội dung: /suanhac ID noi-dung Nội dung mới`;

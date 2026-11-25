@@ -289,3 +289,23 @@ test('Zalo and dashboard share search failure handling and admin search diagnost
     await memory.clearHistory('search-shared');
   } finally { searchService.searchWebDetailed = originalSearch; }
 });
+
+test('webhook /id reports userId and /reset enforces ADMIN_ZALO_IDS when configured', async () => {
+  await webhook(message('id-check', '/id', 'admin-guard-chat'), response());
+  assert.ok(sent[0][1].includes('owner'));
+  assert.ok(sent[0][1].includes('admin-guard-chat'));
+
+  process.env.ADMIN_ZALO_IDS = 'real-admin-id';
+  await memory.addTurn('admin-guard-chat', 'hello', 'hi');
+  const blocked = response();
+  await webhook(message('reset-denied', '/reset', 'admin-guard-chat'), blocked);
+  assert.equal(blocked.body.ok, false);
+  assert.equal((await memory.getHistory('admin-guard-chat')).length, 2);
+
+  const adminMsg = message('reset-allowed', '/reset', 'admin-guard-chat');
+  adminMsg.body.message.from.id = 'real-admin-id';
+  const allowed = response();
+  await webhook(adminMsg, allowed);
+  assert.equal(allowed.body.ok, true);
+  assert.equal((await memory.getHistory('admin-guard-chat')).length, 0);
+});

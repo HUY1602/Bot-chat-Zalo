@@ -2,6 +2,9 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const {
   checkAndTriggerMorningDigest,
+  composeMorningDigestMessage,
+  updateChatDigestSettings,
+  getChatDigestSettings,
   getVietnamDateTimeParts,
   isMorningDigestWindow,
   getTargetChatIds
@@ -113,5 +116,35 @@ test('explains that persistent subscriber storage is required when no chats are 
     if (originalRedisToken !== undefined) {
       process.env.UPSTASH_REDIS_REST_TOKEN = originalRedisToken;
     }
+  }
+});
+
+test('morning digest strips markdown bold asterisks and supports per-chat city settings', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async url => {
+    const u = String(url);
+    if (u.includes('geocoding-api.open-meteo.com')) {
+      return { ok: true, json: async () => ({ results: [{ name: 'Pleiku', admin1: 'Gia Lai', latitude: 13.9833, longitude: 108.0 }] }) };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        current_weather: { temperature: 24, windspeed: 8, weathercode: 0 },
+        daily: { temperature_2m_max: [29], temperature_2m_min: [19], precipitation_probability_max: [15], weathercode: [0] }
+      })
+    };
+  };
+
+  try {
+    await updateChatDigestSettings('chat-digest-test', { enabled: false, city: 'Pleiku' });
+    const settings = await getChatDigestSettings('chat-digest-test');
+    assert.equal(settings.enabled, false);
+    assert.equal(settings.city, 'Pleiku');
+
+    const msg = await composeMorningDigestMessage('chat-digest-test', { day: 25, month: 11, year: 2026, weekdayName: 'Thứ Tư' });
+    assert.ok(!msg.includes('**'), 'Morning digest should not contain raw markdown **');
+    assert.ok(msg.includes('PLEIKU'));
+  } finally {
+    global.fetch = originalFetch;
   }
 });
