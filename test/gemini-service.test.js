@@ -390,9 +390,19 @@ test('grounded replies handle the reported APEC question, failures and model-req
       await withFreeModelResponses(() => ({ ok: false, status: 500, body: { error: { code: 500, message: 'offline' } } }), async () => {
         const result = await generateAnswerWithAction('APEC 2026 diễn ra ở đâu');
         assert.match(result.action.text, /Thâm Quyến/);
-        assert.match(result.action.text, /https:\/\/apec.org\/2026/);
+        assert.match(result.action.text, /https:\/\/apec\.org\/2026/);
         assert.equal(result.search.status, 'ok');
         assert.doesNotMatch(result.action.text, /ACTION:|DỮ LIỆU THỰC TẾ/);
+      });
+    });
+    await t.test('skips unrelated source links when search excerpts do not answer the question', async () => {
+      searchService.searchWebDetailed = async () => report;
+      await withFreeModelResponses([
+        freeModelResponse('Dạ em không tìm thấy thông tin liên quan đến câu hỏi này ạ. [[NO_SOURCES]]')
+      ], async () => {
+        const result = await generateAnswerWithAction('tra google sếp Quy vừa nói gì');
+        assert.doesNotMatch(result.action.text, /Nguồn:|https:\/\/apec\.org|NO_SOURCES/);
+        assert.match(result.action.text, /không tìm thấy/);
       });
     });
   } finally { searchService.searchWebDetailed = originalSearch; }

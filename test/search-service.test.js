@@ -13,7 +13,7 @@ const ddg = '<div class="result results_links"><a href="//duckduckgo.com/l/?uddg
 
 test('new information is searched even when preceded by greetings or bot names', () => {
   for (const query of ['hội nghị thượng đỉnh APEC 2026 diễn ra ở đâu', 'Em ơi cập nhật APEC mới nhất', 'Chào em, APEC diễn ra ở đâu?', 'Cảm ơn, cho hỏi CEO công ty XYZ hiện nay là ai?', 'tra cứu thông tin sản phẩm XYZ', 'tổng thống hiện tại là ai', 'nghị định mới có hiệu lực khi nào', 'cập nhật kết quả lượt trận nation league đêm qua', 'tất cả các trận diễn ra đêm qua', 'Tình hình dự án XYZ hôm nay ra sao?', 'Có cập nhật mới về mẫu điện thoại XYZ không?', 'iPhone mới?', 'tra gg tình hình Mỹ với Iran', 'biết vụ ở đường Nguyễn Văn Tuyết , Hà nội hôm qua không']) assert.equal(search.shouldSearchWeb(query), true, query);
-  for (const query of ['Em mới về nhà', 'xin chào', 'cảm ơn em', '/ping', '/repeat daily 08:00 uống nước', '/suanhac remind_1_abc gio 08:00', 'viết cho anh bài thơ', 'em tên gì']) assert.equal(search.shouldSearchWeb(query), false, query);
+  for (const query of ['Em mới về nhà', 'xin chào', 'cảm ơn em', '/ping', '/repeat daily 08:00 uống nước', '/suanhac remind_1_abc gio 08:00', 'viết cho anh bài thơ', 'em tên gì', 'sếp Quy vừa nói gì', 'anh Huy vừa nhắn gì vậy', 'Em của thầy mới nâng cấp, thông tin hơi bị chuẩn']) assert.equal(search.shouldSearchWeb(query), false, query);
 });
 
 test('queries retain the requested subject, expand follow-ups from user history and anchor relative days', () => {
