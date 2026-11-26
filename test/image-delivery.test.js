@@ -164,3 +164,46 @@ test('webhook GENERATE_IMAGE falls back to hosted /api/image URL if multipart fa
   assert.equal(res.body.deliveryMethod, 'hosted');
   assert.match(sentHostedUrl, /^https:\/\/bot-chat-zalo-one\.vercel\.app\/api\/image\?id=art_.*\.png$/);
 });
+
+test('image generation falls back to AI Horde when Pollinations returns 402 and rewrites waiting captions', async () => {
+  const fakeHordeImg = Buffer.alloc(1400, 0xaa);
+  geminiService.generateAnswerWithAction = async () => ({
+    action: { type: 'GENERATE_IMAGE', imagePrompt: 'beauty and the beast', text: 'Dạ em vẽ liền cho anh đây ạ! Anh chờ em xíu nghen' }
+  });
+  global.fetch = async url => {
+    const u = String(url);
+    if (u.startsWith('https://image.pollinations.ai/')) {
+      return { ok: false, status: 402, headers: new Headers({ 'content-type': 'application/json' }), arrayBuffer: async () => Buffer.from('{}') };
+    }
+    if (u === 'https://aihorde.net/api/v2/generate/async') {
+      return { ok: true, status: 202, json: async () => ({ id: 'horde-job-1' }) };
+    }
+    if (u.includes('/api/v2/generate/check/')) {
+      return { ok: true, json: async () => ({ done: true, faulted: false }) };
+    }
+    if (u.includes('/api/v2/generate/status/')) {
+      return { ok: true, json: async () => ({ generations: [{ img: 'https://r2.test/horde.webp' }] }) };
+    }
+    if (u === 'https://r2.test/horde.webp') {
+      return { ok: true, headers: new Headers({ 'content-type': 'image/webp' }), arrayBuffer: async () => fakeHordeImg };
+    }
+    throw new Error(`Unexpected URL: ${u}`);
+  };
+
+  let sentCaption = '';
+  let sentExt = '';
+  bot.sendPhotoBuffer = async (_chatId, buf, opts) => {
+    sentCaption = opts.caption;
+    sentExt = opts.filename;
+    assert.equal(buf.length, 1400);
+    return { ok: true };
+  };
+
+  const res = mockResponse();
+  await webhook(drawWebhookReq('draw-horde-1', 'vẽ người đẹp và quái vật'), res);
+  assert.equal(res.code, 200);
+  assert.equal(res.body.deliveryMethod, 'multipart');
+  assert.equal(sentExt, 'artwork.webp');
+  assert.match(sentCaption, /vẽ xong tranh/i);
+  assert.doesNotMatch(sentCaption, /chờ em|đang vẽ/i);
+});

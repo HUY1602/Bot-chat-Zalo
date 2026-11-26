@@ -23,15 +23,27 @@ function isZaloAdmin(userId) {
 }
 const stateStore = require('../lib/state-store');
 
+function normalizeCompletedArtCaption(rawCaption, senderName) {
+  const name = senderName && senderName !== 'Thành viên' ? senderName : 'anh';
+  const text = String(rawCaption || '').trim();
+  if (!text || /(?:đang\s+vẽ|vẽ\s+liền|chờ\s+em|đợi\s+em)/iu.test(text)) {
+    return `Dạ Bọt biển vẽ xong tranh cho ${name} rồi nè! 🎨✨`;
+  }
+  return text;
+}
+
 /**
  * Tải ảnh AI về trước và gửi trực tiếp vào Zalo qua 3 lớp dự phòng:
  * 1. Upload binary (multipart/form-data) trực tiếp lên Zalo sendPhoto
  * 2. Lưu tạm lên Redis/hosted endpoint /api/image?id=xxx.jpg để Zalo tải nhanh
- * 3. Gửi URL gốc Pollinations (đã được làm ấm cache CDN ở bước tải trước)
+ * 3. Gửi URL gốc đã vẽ (nếu khả dụng)
  */
-async function deliverGeneratedImage(req, chatId, imageUrl, caption, replyToMsgId) {
+async function deliverGeneratedImage(req, chatId, promptOrUrl, caption, replyToMsgId, options = {}) {
   botService.sendChatAction(chatId, 'upload_photo').catch(() => {});
-  const fetched = await imageService.fetchGeneratedImage(imageUrl);
+  const primaryUrl = options.imageUrl || (String(promptOrUrl || '').startsWith('http') ? promptOrUrl : imageService.buildImageUrl(promptOrUrl));
+  const fetched = typeof imageService.fetchBestGeneratedImage === 'function'
+    ? await imageService.fetchBestGeneratedImage(options.prompt || promptOrUrl, { primaryUrl })
+    : await imageService.fetchGeneratedImage(primaryUrl);
   let hostedUrl = null;
 
   if (fetched?.buffer) {
@@ -65,8 +77,9 @@ async function deliverGeneratedImage(req, chatId, imageUrl, caption, replyToMsgI
     }
   }
 
+  const directUrl = fetched?.sourceUrl || primaryUrl;
   try {
-    const directRes = await botService.sendPhoto(chatId, imageUrl, caption, replyToMsgId);
+    const directRes = await botService.sendPhoto(chatId, directUrl, caption, replyToMsgId);
     if (directRes?.ok === true) {
       return { method: 'directUrl', ok: true };
     }
@@ -75,8 +88,8 @@ async function deliverGeneratedImage(req, chatId, imageUrl, caption, replyToMsgI
     console.warn('[Image Delivery] Lỗi sendPhoto directUrl:', err.message);
   }
 
-  const fallbackUrl = hostedUrl || imageUrl;
-  await botService.sendMessage(chatId, `${caption}\n\n🔗 Bấm vào đây để xem ảnh nét căng: ${fallbackUrl}`, replyToMsgId);
+  const fallbackUrl = hostedUrl || directUrl;
+  await botService.sendMessage(chatId, `${caption}\n\n🔗 Bấm vào đây để xem ảnh: ${fallbackUrl}`, replyToMsgId);
   return { method: 'linkFallback', ok: false, url: fallbackUrl };
 }
 
@@ -578,10 +591,11 @@ module.exports = async function handler(req, res) {
     if (/^\/(?:draw|image|ve|paint|art|gen)\s+/i.test(userQuery)) {
       console.log(`[Fast-path Draw] ${senderName} yêu cầu vẽ tranh: "${userQuery}"`);
       try {
-        const { imageUrl, rawPrompt, caption } = await imageService.generateArtwork(userQuery, senderName);
+        const { imageUrl, rawPrompt, enhancedPrompt, caption } = await imageService.generateArtwork(userQuery, senderName);
         console.log(`[Image Generated] URL: ${imageUrl}`);
 
-        const delivery = await deliverGeneratedImage(req, chatId, imageUrl, caption, msgId);
+        const finalCaption = normalizeCompletedArtCaption(caption, senderName);
+        const delivery = await deliverGeneratedImage(req, chatId, enhancedPrompt || imageUrl, finalCaption, msgId, { imageUrl, prompt: enhancedPrompt });
 
         await memoryService.addTurn(
           chatId,
@@ -675,9 +689,9 @@ module.exports = async function handler(req, res) {
       console.log(`[Semantic Action: GENERATE_IMAGE] Prompt: "${action.imagePrompt}"`);
       try {
         const imageUrl = imageService.buildImageUrl(action.imagePrompt);
-        const caption = action.text || `Dạ tranh của ${senderName} đây nè! 🎨✨\n🫧 Bọt biển vẽ cho ${senderName} có đẹp không nè? 🥰`;
+        const caption = normalizeCompletedArtCaption(action.text, senderName);
 
-        const delivery = await deliverGeneratedImage(req, chatId, imageUrl, caption, msgId);
+        const delivery = await deliverGeneratedImage(req, chatId, action.imagePrompt, caption, msgId, { imageUrl, prompt: action.imagePrompt });
 
         await memoryService.addTurn(chatId, userPrompt, caption);
         return res.status(200).json({ ok: true, action: 'generateArtwork', deliveryMethod: delivery.method });
