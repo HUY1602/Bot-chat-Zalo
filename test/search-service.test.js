@@ -4,7 +4,7 @@ const search = require('../lib/search-service');
 let originalEnv, originalFetch;
 beforeEach(() => {
   originalEnv = { ...process.env }; originalFetch = global.fetch;
-  for (const name of ['TAVILY_API_KEY', 'SERPER_API_KEY', 'SERPAPI_API_KEY', 'SERP_API_KEY', 'GEMINI_API_KEY']) delete process.env[name];
+  for (const name of ['TAVILY_API_KEY', 'tavily_api_key', 'SERPER_API_KEY', 'serper_api_key', 'SERPAPI_API_KEY', 'serpapi_api_key', 'SERP_API_KEY', 'GEMINI_API_KEY']) delete process.env[name];
   global.fetch = async () => { throw new Error('Unexpected network request'); };
 });
 afterEach(() => { process.env = originalEnv; global.fetch = originalFetch; });
@@ -175,4 +175,61 @@ test('Tavily and Serper providers work when configured', async () => {
   const serperReport = await search.searchWebDetailed('kết quả U17 Việt Nam 2026');
   assert.equal(serperReport.provider, 'Serper Google');
   assert.equal(serperReport.results[0].url, 'https://tuoitre.vn/u17-mali-2026');
+});
+
+test('entity questions, quote/year sanitization, query relaxation, lowercase tavily_api_key and DDG Lite fallback work reliably', async () => {
+  for (const q of [
+    'biết game Sword Staff không',
+    'có biết tựa game Elden Ring không em',
+    'Sword Staff là game gì',
+    'giftcode Sword x Staff mới',
+    'biết Black Myth Wukong chưa'
+  ]) {
+    assert.equal(search.shouldSearchWeb(q), true, q);
+  }
+  assert.equal(search.cleanSearchQuery('biết game Sword Staff không'), 'game Sword Staff');
+  assert.equal(search.cleanSearchQuery('"Sword Staff" là game gì'), 'Sword Staff là game gì');
+  assert.equal(search.sanitizeModelSearchQuery('"Sword Staff" game 2024', 'biết game Sword Staff không'), 'Sword Staff game');
+
+  // Lowercase tavily_api_key + automatic query relaxation when verbose query returns empty
+  process.env.tavily_api_key = 'tvly-lower-key';
+  const seenQueries = [];
+  global.fetch = async (url, options) => {
+    assert.equal(String(url), 'https://api.tavily.com/search');
+    const body = JSON.parse(options.body);
+    seenQueries.push(body.query);
+    if (/là game gì/i.test(body.query)) return json({ results: [] });
+    return json({ results: [{ title: 'Sword x Staff - Funtap', content: 'Game nhập vai nhàn rỗi của Boltray Games ra mắt 4/11/2026.', url: 'https://sxs.funtap.games/' }] });
+  };
+  const relaxedReport = await search.searchWebDetailed('"Sword Staff" là game gì');
+  assert.equal(relaxedReport.status, 'ok');
+  assert.equal(relaxedReport.provider, 'Tavily');
+  assert.equal(seenQueries.length, 2);
+  assert.equal(seenQueries[1], 'Sword Staff');
+  assert.equal(relaxedReport.results[0].url, 'https://sxs.funtap.games/');
+  delete process.env.tavily_api_key;
+
+  // DuckDuckGo Lite fallback when html.duckduckgo.com returns HTTP 403 (auth) on cloud IP
+  global.fetch = async url => {
+    const u = String(url);
+    if (u.includes('html.duckduckgo.com')) return { ok: false, status: 403, text: async () => 'Forbidden' };
+    if (u.includes('lite.duckduckgo.com')) {
+      return {
+        ok: true,
+        text: async () => `<a href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fswordxstaff.boltray.com%2F" class="result-link">Sword x Staff RPG</a><td class="result-snippet">Fantasy RPG by Boltray Games.</td>`
+      };
+    }
+    return { ok: true, text: async () => '<rss><channel></channel></rss>', json: async () => ({ query: { search: [] } }) };
+  };
+  const liteReport = await search.searchWebDetailed('biết game Sword Staff không');
+  assert.equal(liteReport.status, 'ok');
+  assert.equal(liteReport.provider, 'DuckDuckGo');
+  assert.equal(liteReport.results[0].url, 'https://swordxstaff.boltray.com/');
+
+  // Direct article links take priority over Google News RSS redirect links
+  const withSources = search.appendSources('Sword x Staff là game nhập vai.', [
+    { url: 'https://news.google.com/rss/articles/CBMiLongRedirect123?oc=5' },
+    { url: 'https://www.techz.vn/sword-x-staff.html' }
+  ]);
+  assert.match(withSources, /Nguồn:\nhttps:\/\/www\.techz\.vn\/sword-x-staff\.html\nhttps:\/\/news\.google\.com/);
 });
