@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node scripts/local-dev.js",
     "dev": "node scripts/local-dev.js",
-    "test": "node --test test/gemini-service.test.js test/search-service.test.js test/daily-digest-service.test.js test/reliability.test.js test/recurrence.test.js test/reminder-updates.test.js",
+    "test": "node --test test/gemini-service.test.js test/search-service.test.js test/daily-digest-service.test.js test/reliability.test.js test/recurrence.test.js test/reminder-updates.test.js test/image-delivery.test.js",
     "test-bot": "node scripts/test-bot.js",
     "test-freemodel": "node scripts/test-freemodel.js",
     "set-webhook": "node scripts/set-webhook.js"

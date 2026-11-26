@@ -13,6 +13,7 @@ const setupHandler = require('../api/setup');
 const testChatHandler = require('../api/test-chat');
 const memoryHandler = require('../api/memory');
 const reminderCronHandler = require('../api/reminder-cron');
+const imageHandler = require('../api/image');
 const reminderService = require('../lib/reminder-service');
 
 const app = express();
@@ -30,6 +31,7 @@ app.all('/api/setup', (req, res) => setupHandler(req, res));
 app.all('/api/test-chat', (req, res) => testChatHandler(req, res));
 app.all('/api/memory', (req, res) => memoryHandler(req, res));
 app.all('/api/reminder-cron', (req, res) => reminderCronHandler(req, res));
+app.all('/api/image', (req, res) => imageHandler(req, res));
 
 // Background local scheduler: Quét và kích hoạt nhắc việc mỗi 10 giây
 setInterval(async () => {

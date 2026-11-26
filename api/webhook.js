@@ -24,6 +24,63 @@ function isZaloAdmin(userId) {
 const stateStore = require('../lib/state-store');
 
 /**
+ * Tải ảnh AI về trước và gửi trực tiếp vào Zalo qua 3 lớp dự phòng:
+ * 1. Upload binary (multipart/form-data) trực tiếp lên Zalo sendPhoto
+ * 2. Lưu tạm lên Redis/hosted endpoint /api/image?id=xxx.jpg để Zalo tải nhanh
+ * 3. Gửi URL gốc Pollinations (đã được làm ấm cache CDN ở bước tải trước)
+ */
+async function deliverGeneratedImage(req, chatId, imageUrl, caption, replyToMsgId) {
+  botService.sendChatAction(chatId, 'upload_photo').catch(() => {});
+  const fetched = await imageService.fetchGeneratedImage(imageUrl);
+  let hostedUrl = null;
+
+  if (fetched?.buffer) {
+    try {
+      const uploadRes = await botService.sendPhotoBuffer(chatId, fetched.buffer, {
+        caption,
+        filename: `artwork.${fetched.ext}`,
+        mimeType: fetched.mimeType,
+        replyToMsgId
+      });
+      if (uploadRes?.ok === true) {
+        return { method: 'multipart', ok: true };
+      }
+      console.warn('[Image Delivery] sendPhotoBuffer thất bại:', JSON.stringify(uploadRes));
+    } catch (err) {
+      console.warn('[Image Delivery] Lỗi sendPhotoBuffer:', err.message);
+    }
+
+    try {
+      const saved = await imageService.saveTempImage(fetched.buffer, fetched.mimeType);
+      if (saved?.id) {
+        hostedUrl = imageService.buildHostedImageUrl(req, saved.id, saved.ext);
+        const hostedRes = await botService.sendPhoto(chatId, hostedUrl, caption, replyToMsgId);
+        if (hostedRes?.ok === true) {
+          return { method: 'hosted', ok: true, hostedUrl };
+        }
+        console.warn('[Image Delivery] sendPhoto hostedUrl thất bại:', JSON.stringify(hostedRes));
+      }
+    } catch (err) {
+      console.warn('[Image Delivery] Lỗi gửi qua hostedUrl:', err.message);
+    }
+  }
+
+  try {
+    const directRes = await botService.sendPhoto(chatId, imageUrl, caption, replyToMsgId);
+    if (directRes?.ok === true) {
+      return { method: 'directUrl', ok: true };
+    }
+    console.warn('[Image Delivery] sendPhoto directUrl thất bại:', JSON.stringify(directRes));
+  } catch (err) {
+    console.warn('[Image Delivery] Lỗi sendPhoto directUrl:', err.message);
+  }
+
+  const fallbackUrl = hostedUrl || imageUrl;
+  await botService.sendMessage(chatId, `${caption}\n\n🔗 Bấm vào đây để xem ảnh nét căng: ${fallbackUrl}`, replyToMsgId);
+  return { method: 'linkFallback', ok: false, url: fallbackUrl };
+}
+
+/**
  * Clean up @mentions or bot name prefix from message text
  * @param {string} rawText 
  * @returns {string}
@@ -524,10 +581,7 @@ module.exports = async function handler(req, res) {
         const { imageUrl, rawPrompt, caption } = await imageService.generateArtwork(userQuery, senderName);
         console.log(`[Image Generated] URL: ${imageUrl}`);
 
-        const sendResult = await botService.sendPhoto(chatId, imageUrl, caption, msgId);
-        if (sendResult && sendResult.ok === false) {
-          await botService.sendMessage(chatId, `${caption}\n\n🔗 Bấm vào đây để xem ảnh nét căng: ${imageUrl}`, msgId);
-        }
+        const delivery = await deliverGeneratedImage(req, chatId, imageUrl, caption, msgId);
 
         await memoryService.addTurn(
           chatId,
@@ -535,7 +589,7 @@ module.exports = async function handler(req, res) {
           `[Em đã vẽ tranh "${rawPrompt}" và gửi ảnh thành công cho ${senderName}]`
         );
 
-        return res.status(200).json({ ok: true, action: 'generateArtwork' });
+        return res.status(200).json({ ok: true, action: 'generateArtwork', deliveryMethod: delivery.method });
       } catch (drawErr) {
         console.error('Lỗi khi vẽ tranh AI:', drawErr);
         await botService.sendMessage(
@@ -623,13 +677,10 @@ module.exports = async function handler(req, res) {
         const imageUrl = imageService.buildImageUrl(action.imagePrompt);
         const caption = action.text || `Dạ tranh của ${senderName} đây nè! 🎨✨\n🫧 Bọt biển vẽ cho ${senderName} có đẹp không nè? 🥰`;
 
-        const sendResult = await botService.sendPhoto(chatId, imageUrl, caption, msgId);
-        if (sendResult && sendResult.ok === false) {
-          await botService.sendMessage(chatId, `${caption}\n\n🔗 Bấm vào đây để xem ảnh nét căng: ${imageUrl}`, msgId);
-        }
+        const delivery = await deliverGeneratedImage(req, chatId, imageUrl, caption, msgId);
 
         await memoryService.addTurn(chatId, userPrompt, caption);
-        return res.status(200).json({ ok: true, action: 'generateArtwork' });
+        return res.status(200).json({ ok: true, action: 'generateArtwork', deliveryMethod: delivery.method });
       } catch (drawErr) {
         console.error('Lỗi khi tải ảnh vẽ AI:', drawErr);
         await botService.sendMessage(chatId, `${action.text}\n\n(Ui, em gặp chút trục trặc khi tải ảnh: ${drawErr.message} 🥺)`, msgId);
