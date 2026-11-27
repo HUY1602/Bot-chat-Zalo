@@ -244,3 +244,36 @@ test('entity questions, quote/year sanitization, query relaxation, lowercase tav
   ]);
   assert.match(withSources, /Nguồn:\nhttps:\/\/www\.techz\.vn\/sword-x-staff\.html\nhttps:\/\/news\.google\.com/);
 });
+
+test('insults and taunts directed at the bot bypass web search while preserving factual queries', () => {
+  for (const insult of [
+    'con bot ngu thế',
+    'bot ngu vcl',
+    'mày nghĩ mày là ai?',
+    'mày là cái thá gì?',
+    'hôm nay sao mày đần vậy?',
+    'dạo này bot ngáo thế?',
+    'mày có biết suy nghĩ không?',
+    'câm mồm đi',
+    'đm bot vô dụng'
+  ]) {
+    assert.equal(search.isBotInsultOrTaunt(insult), true, insult);
+    assert.equal(search.shouldSearchWeb(insult), false, insult);
+  }
+
+  // Classifier "con bot..." must not be treated as follow-up "còn..."
+  const history = [
+    { role: 'user', parts: [{ text: '[Huy]: Hội nghị APEC 2026 diễn ra ở đâu' }] },
+    { role: 'model', parts: [{ text: 'Dạ ở Thâm Quyến ạ.' }] }
+  ];
+  assert.doesNotMatch(search.buildSearchQuery('Con bot ngu thế', history, 'Huy'), /APEC/);
+
+  // Factual queries with homographs without tones ("điện", "máy", "còn") or rude prefixes still search normally
+  for (const factual of [
+    'giá điện hôm nay tăng bao nhiêu?',
+    'đm giá vàng hôm nay bao nhiêu',
+    'tra google xem bot là gì'
+  ]) {
+    assert.equal(search.shouldSearchWeb(factual), true, factual);
+  }
+});

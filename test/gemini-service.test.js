@@ -417,5 +417,34 @@ test('grounded replies handle the reported APEC question, failures and model-req
         assert.match(result.action.text, /không tìm thấy/);
       });
     });
+
+    await t.test('routes insults directly to sassy persona reply without triggering web search even after searched history', async () => {
+      let searchCalled = false;
+      searchService.searchWebDetailed = async () => { searchCalled = true; return report; };
+      const history = [
+        { role: 'user', parts: [{ text: '[Huy]: Hội nghị APEC 2026 diễn ra ở đâu' }] },
+        { role: 'model', parts: [{ text: 'Dạ APEC 2026 tổ chức tại Thâm Quyến ạ.' }] }
+      ];
+
+      await withGeminiResponses([
+        geminiResponse(['Mày nghĩ mày là ai mà ăn nói kiểu đó? Xem lại thái độ đi nha! 🙄'])
+      ], async requests => {
+        const result = await generateAnswerWithAction('[Huy]: Con bot ngu thế, mày nghĩ mày là ai?', {
+          apiKey: 'test-key',
+          model: 'test-model',
+          history,
+          searchQuery: 'Con bot ngu thế, mày nghĩ mày là ai?',
+          senderName: 'Huy'
+        });
+        assert.equal(searchCalled, false);
+        assert.equal(requests.length, 1);
+        assert.equal(result.action.type, 'CHAT');
+        assert.match(result.action.text, /Xem lại thái độ đi nha/);
+        const instruction = requests[0].body.systemInstruction.parts[0].text;
+        assert.match(instruction, /CHẾ ĐỘ CÔ NÀNG CÁ TÍNH/);
+        assert.match(instruction, /ĐÁP TRẢ TƯƠNG ỨNG/);
+        assert.ok(Array.isArray(requests[0].body.safetySettings));
+      });
+    });
   } finally { searchService.searchWebDetailed = originalSearch; }
 });
