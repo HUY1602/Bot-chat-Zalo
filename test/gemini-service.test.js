@@ -326,12 +326,12 @@ test('grounded replies handle the reported APEC question, failures and model-req
       url: 'https://apec.org/2026', publishedAt: '2026-11-19' }]
   };
   try {
-    await t.test('answers APEC directly without leaking internal headers or fixed historical claims', async () => {
+    await t.test('answers APEC directly without leaking internal headers, omits sources by default, and cites sources when requested', async () => {
       searchService.searchWebDetailed = async () => report;
-      await withFreeModelResponses([freeModelResponse('DỮ LIỆU THỰC TẾ TRA CỨU TỪ GOOGLE:\nNội dung: Địa điểm tổ chức APEC 2026 là Thâm Quyến, Trung Quốc.')], async requests => {
+      await withFreeModelResponses([freeModelResponse('DỮ LIỆU THỰC TẾ TRA CỨU TỪ GOOGLE:\nNội dung: Địa điểm tổ chức APEC 2026 là Thâm Quyến, Trung Quốc [1].')], async requests => {
         const result = await generateAnswerWithAction('[Huy]: hội nghị thượng đỉnh APEC 2026 diễn ra ở đâu', { searchQuery: 'hội nghị thượng đỉnh APEC 2026 diễn ra ở đâu', senderName: 'Huy' });
         assert.match(result.action.text, /Thâm Quyến, Trung Quốc/);
-        assert.match(result.action.text, /https:\/\/apec.org\/2026/);
+        assert.doesNotMatch(result.action.text, /Nguồn:|https:\/\/apec\.org\/2026|\[1\]/);
         assert.doesNotMatch(result.action.text, /DỮ LIỆU THỰC TẾ|Nội dung:/);
         assert.equal(result.search.provider, 'Google');
         assert.equal(requests.length, 1);
@@ -339,6 +339,12 @@ test('grounded replies handle the reported APEC question, failures and model-req
         assert.match(instruction, /Hỏi địa điểm|Nếu hỏi địa điểm/);
         assert.match(instruction, /Không tự suy ra đã diễn ra/);
         assert.doesNotMatch(instruction, /Harry Kane|Quả bóng vàng Việt Nam năm 2026/);
+      });
+
+      await withFreeModelResponses([freeModelResponse('Địa điểm tổ chức APEC 2026 là Thâm Quyến, Trung Quốc [1].')], async () => {
+        const withSrc = await generateAnswerWithAction('[Huy]: hội nghị thượng đỉnh APEC 2026 diễn ra ở đâu, cho xin nguồn', { searchQuery: 'hội nghị thượng đỉnh APEC 2026 diễn ra ở đâu, cho xin nguồn', senderName: 'Huy' });
+        assert.match(withSrc.action.text, /Thâm Quyến, Trung Quốc/);
+        assert.match(withSrc.action.text, /Nguồn:\nhttps:\/\/apec\.org\/2026/);
       });
     });
     await t.test('empty and unavailable searches return concise distinct messages without asking AI to guess', async () => {
@@ -366,13 +372,16 @@ test('grounded replies handle the reported APEC question, failures and model-req
         assert.doesNotMatch(result.action.text, /ACTION:/);
       });
     });
-    await t.test('already-grounded native answer does not spend another AI request', async () => {
+    await t.test('already-grounded native answer does not spend another AI request and respects source preference', async () => {
       searchService.searchWebDetailed = async () => ({ ...report, provider: 'Gemini Google Search', answer: 'APEC 2026 tổ chức tại Thâm Quyến.' });
       await withFreeModelResponses([], async requests => {
         const result = await generateAnswerWithAction('APEC 2026 diễn ra ở đâu');
         assert.equal(requests.length, 0);
         assert.match(result.action.text, /Thâm Quyến/);
-        assert.match(result.action.text, /Nguồn:/);
+        assert.doesNotMatch(result.action.text, /Nguồn:/);
+
+        const withSrc = await generateAnswerWithAction('APEC 2026 diễn ra ở đâu, trích nguồn');
+        assert.match(withSrc.action.text, /Nguồn:\nhttps:\/\/apec\.org\/2026/);
       });
     });
     await t.test('a question about new models is searched rather than mistaken for bot identity', async () => {
@@ -385,14 +394,17 @@ test('grounded replies handle the reported APEC question, failures and model-req
         assert.match(result.action.text, /chưa tìm được nguồn/);
       });
     });
-    await t.test('if AI synthesis fails, actual snippets and links are still returned', async () => {
+    await t.test('if AI synthesis fails, actual snippets are still returned and links shown only when requested', async () => {
       searchService.searchWebDetailed = async () => report;
       await withFreeModelResponses(() => ({ ok: false, status: 500, body: { error: { code: 500, message: 'offline' } } }), async () => {
         const result = await generateAnswerWithAction('APEC 2026 diễn ra ở đâu');
         assert.match(result.action.text, /Thâm Quyến/);
-        assert.match(result.action.text, /https:\/\/apec\.org\/2026/);
+        assert.doesNotMatch(result.action.text, /https:\/\/apec\.org\/2026/);
         assert.equal(result.search.status, 'ok');
         assert.doesNotMatch(result.action.text, /ACTION:|DỮ LIỆU THỰC TẾ/);
+
+        const withSrc = await generateAnswerWithAction('APEC 2026 diễn ra ở đâu, xin link nguồn');
+        assert.match(withSrc.action.text, /https:\/\/apec\.org\/2026/);
       });
     });
     await t.test('skips unrelated source links when search excerpts do not answer the question', async () => {
